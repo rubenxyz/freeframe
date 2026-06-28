@@ -102,8 +102,8 @@ function PermissionSelect({
 function CopyButton({ text }: { text: string }) {
   const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
 
-  function handleCopy() {
-    const ok = copyToClipboard(text);
+  async function handleCopy() {
+    const ok = await copyToClipboard(text);
     if (ok) {
       setStatus('copied');
       setTimeout(() => setStatus('idle'), 2000);

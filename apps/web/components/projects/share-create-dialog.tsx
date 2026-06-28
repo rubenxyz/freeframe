@@ -81,8 +81,8 @@ function AssetTypeIcon({ type, className }: { type: string; className?: string }
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle')
 
-  function handleCopy() {
-    const ok = copyToClipboard(text)
+  async function handleCopy() {
+    const ok = await copyToClipboard(text)
     if (ok) {
       setStatus('copied')
       setTimeout(() => setStatus('idle'), 2000)
@@ -728,8 +728,8 @@ function LinkCreatedPhase({ result, allResults, onSelectResult, onDone, onAdvanc
         <div className="flex items-center gap-2 rounded-md border border-border bg-bg-tertiary px-3 py-2">
           <span className="flex-1 truncate font-mono text-xs text-text-primary">{shareUrl}</span>
           <button
-            onClick={() => {
-              if (copyToClipboard(shareUrl)) {
+            onClick={async () => {
+              if (await copyToClipboard(shareUrl)) {
                 setUrlCopied(true)
                 setTimeout(() => setUrlCopied(false), 2000)
               }

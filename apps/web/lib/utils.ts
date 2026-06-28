@@ -108,13 +108,15 @@ export function endOfDayISO(dateStr: string): string {
  * Handles iOS Safari where execCommand('copy') requires a selected editable element.
  * Returns true on success, false on failure.
  */
-export function copyToClipboard(text: string): boolean {
+export async function copyToClipboard(text: string): Promise<boolean> {
   // Modern async clipboard API
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {
-      // noop — writeText handles this, fallback not triggered
-    })
-    return true
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      return false
+    }
   }
 
   // Fallback for older browsers (including iOS Safari < 13.4)

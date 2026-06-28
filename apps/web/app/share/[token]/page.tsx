@@ -196,6 +196,50 @@ function ErrorState({ expired }: ErrorStateProps) {
   )
 }
 
+// ─── Guest comment item ───────────────────────────────────────────────────────
+
+interface GuestCommentItemProps {
+  comment: GuestComment
+}
+
+function GuestCommentItem({ comment }: GuestCommentItemProps) {
+  const displayName = comment.guest_author?.name || comment.author?.name || 'Unknown'
+  const avatarUrl = comment.author?.avatar_url ?? null
+  const [imgError, setImgError] = React.useState(false)
+
+  return (
+    <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-2xs font-medium text-purple-400">
+          {avatarUrl && !imgError ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-full w-full rounded-full object-cover"
+              referrerPolicy="no-referrer"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            displayName.charAt(0).toUpperCase()
+          )}
+        </div>
+        <span className="text-xs font-medium text-zinc-200">{displayName}</span>
+        {comment.timecode_start != null && (
+          <span className="text-2xs text-zinc-500 font-mono bg-white/5 px-1.5 py-0.5 rounded">
+            {Math.floor(comment.timecode_start / 60)}:
+            {String(Math.floor(comment.timecode_start % 60)).padStart(2, '0')}
+          </span>
+        )}
+        <span className="ml-auto text-2xs text-zinc-600">
+          {new Date(comment.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      <p className="text-sm text-zinc-300 leading-relaxed">{comment.body}</p>
+    </div>
+  )
+}
+
 // ─── Guest comment list (for right panel) ────────────────────────────────────
 
 interface GuestCommentListProps {
@@ -240,45 +284,9 @@ function GuestCommentList({ token, refreshKey }: GuestCommentListProps) {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-      {comments.map((comment) => {
-        const displayName = comment.guest_author?.name || comment.author?.name || 'Unknown'
-        const avatarUrl = comment.author?.avatar_url ?? null
-        const [imgError, setImgError] = React.useState(false)
-        return (
-        <div
-          key={comment.id}
-          className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5"
-        >
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-2xs font-medium text-purple-400">
-              {avatarUrl && !imgError ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="h-full w-full rounded-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                displayName.charAt(0).toUpperCase()
-              )}
-            </div>
-            <span className="text-xs font-medium text-zinc-200">{displayName}</span>
-            {comment.timecode_start != null && (
-              <span className="text-2xs text-zinc-500 font-mono bg-white/5 px-1.5 py-0.5 rounded">
-                {Math.floor(comment.timecode_start / 60)}:
-                {String(Math.floor(comment.timecode_start % 60)).padStart(2, '0')}
-              </span>
-            )}
-            <span className="ml-auto text-2xs text-zinc-600">
-              {new Date(comment.created_at).toLocaleDateString()}
-            </span>
-          </div>
-          <p className="text-sm text-zinc-300 leading-relaxed">{comment.body}</p>
-        </div>
-        )
-      })}
+      {comments.map((comment) => (
+        <GuestCommentItem key={comment.id} comment={comment} />
+      ))}
     </div>
   )
 }
