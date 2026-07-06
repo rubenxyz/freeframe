@@ -1,0 +1,166 @@
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..middleware.auth import get_current_user, get_optional_user
+from ..models.user import User
+from ..models.instance_branding import InstanceBranding
+from ..schemas.instance_branding import (
+    InstanceBrandingUpdate,
+    InstanceBrandingResponse,
+    InstanceBrandingLogoUploadResponse,
+)
+from ..services import s3_service
+from ..config import settings
+
+router = APIRouter(tags=["instance_branding"])
+
+LOGO_TYPES = {
+    "logo-light": "logo_light_key",
+    "logo-dark": "logo_dark_key",
+    "favicon": "favicon_key",
+    "apple-icon": "apple_icon_key",
+    "login-logo": "login_logo_key",
+}
+
+LOGO_CONTENT_TYPES = {
+    "logo-light": "image/webp",
+    "logo-dark": "image/webp",
+    "favicon": "image/x-icon",
+    "apple-icon": "image/png",
+    "login-logo": "image/webp",
+}
+
+
+def _get_or_create_instance_branding(db: Session) -> InstanceBranding:
+    branding = db.query(InstanceBranding).first()
+    if not branding:
+        branding = InstanceBranding()
+        db.add(branding)
+        db.commit()
+        db.refresh(branding)
+    return branding
+
+
+def _enrich_branding_response(branding: InstanceBranding) -> InstanceBrandingResponse:
+    resp = InstanceBrandingResponse.model_validate(branding)
+    if branding.logo_light_key:
+        try:
+            resp.logo_light_url = s3_service.generate_presigned_get_url(branding.logo_light_key)
+        except Exception:
+            resp.logo_light_url = None
+    if branding.logo_dark_key:
+        try:
+            resp.logo_dark_url = s3_service.generate_presigned_get_url(branding.logo_dark_key)
+        except Exception:
+            resp.logo_dark_url = None
+    if branding.favicon_key:
+        try:
+            resp.favicon_url = s3_service.generate_presigned_get_url(branding.favicon_key)
+        except Exception:
+            resp.favicon_url = None
+    if branding.apple_icon_key:
+        try:
+            resp.apple_icon_url = s3_service.generate_presigned_get_url(branding.apple_icon_key)
+        except Exception:
+            resp.apple_icon_url = None
+    if branding.login_logo_key:
+        try:
+            resp.login_logo_url = s3_service.generate_presigned_get_url(branding.login_logo_key)
+        except Exception:
+            resp.login_logo_url = None
+    return resp
+
+
+@router.get("/instance/branding", response_model=InstanceBrandingResponse)
+def get_instance_branding(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+):
+    branding = _get_or_create_instance_branding(db)
+    return _enrich_branding_response(branding)
+
+
+@router.put("/instance/branding", response_model=InstanceBrandingResponse)
+def upsert_instance_branding(
+    body: InstanceBrandingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can update instance branding"
+        )
+    branding = _get_or_create_instance_branding(db)
+    update_data = body.model_dump(exclude_none=True)
+    for field, value in update_data.items():
+        setattr(branding, field, value)
+    db.commit()
+    db.refresh(branding)
+    return _enrich_branding_response(branding)
+
+
+@router.post(
+    "/instance/branding/{logo_type}-upload",
+    response_model=InstanceBrandingLogoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def get_logo_upload_url(
+    logo_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can upload branding logos"
+        )
+    if logo_type not in LOGO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid logo type. Must be one of: {', '.join(LOGO_CONTENT_TYPES.keys())}"
+        )
+    content_type = LOGO_CONTENT_TYPES[logo_type]
+    key = f"branding/{logo_type}/{uuid.uuid4()}"
+    upload_url = s3_service.get_s3_client().generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": settings.s3_bucket,
+            "Key": key,
+            "ContentType": content_type,
+        },
+        ExpiresIn=3600,
+    )
+    return InstanceBrandingLogoUploadResponse(upload_url=upload_url, key=key)
+
+
+@router.delete("/instance/branding/logo/{logo_type}", status_code=status.HTTP_200_OK)
+def reset_logo(
+    logo_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can reset branding logos"
+        )
+    column = LOGO_TYPES.get(logo_type)
+    if not column:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid logo type. Must be one of: {', '.join(LOGO_TYPES.keys())}"
+        )
+    branding = _get_or_create_instance_branding(db)
+    old_key = getattr(branding, column)
+    if old_key:
+        try:
+            s3_service.delete_object(old_key)
+        except Exception:
+            pass
+    setattr(branding, column, None)
+    db.commit()
+    db.refresh(branding)
+    return _enrich_branding_response(branding)

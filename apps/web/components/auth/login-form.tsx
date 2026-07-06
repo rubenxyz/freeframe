@@ -14,7 +14,7 @@ type Step = 'email' | 'code' | 'password' | 'classic'
 
 export function LoginForm() {
   const router = useRouter()
-  const [step, setStep] = useState<Step>('email')
+  const [step, setStep] = useState<Step>('classic')
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
@@ -231,7 +231,7 @@ export function LoginForm() {
     return (
       <div className="animate-slide-up">
         <div className="mb-8">
-          <h1 className="text-xl font-semibold text-text-primary mb-1">Sign in with password</h1>
+          <h1 className="text-xl font-semibold text-text-primary mb-1">Sign in</h1>
           <p className="text-sm text-text-secondary">Enter your email and password to continue.</p>
         </div>
 
@@ -269,9 +269,9 @@ export function LoginForm() {
           <button
             type="button"
             onClick={() => { setStep('email'); setClassicError('') }}
-            className="text-sm text-text-tertiary hover:text-text-secondary transition-colors"
+            className="text-base text-text-tertiary hover:text-text-secondary transition-colors"
           >
-            Back to magic link
+            Sign in with magic code instead
           </button>
         </div>
       </div>
@@ -369,7 +369,7 @@ export function LoginForm() {
           <button
             type="button"
             onClick={() => { setStep('email'); setCode(['', '', '', '', '', '']); setCodeError('') }}
-            className="block w-full text-sm text-text-tertiary hover:text-text-secondary transition-colors"
+            className="block w-full text-base text-text-tertiary hover:text-text-secondary transition-colors"
           >
             Use a different email
           </button>
@@ -378,11 +378,11 @@ export function LoginForm() {
     )
   }
 
-  // Step 1: Email
+  // Step: Email (magic code entry)
   return (
     <div className="animate-slide-up">
       <div className="mb-8">
-        <h1 className="text-xl font-semibold text-text-primary mb-1">Sign in to FreeFrame</h1>
+        <h1 className="text-xl font-semibold text-text-primary mb-1">Magic code sign-in</h1>
         <p className="text-sm text-text-secondary">
           Enter your email and we&apos;ll send you a sign-in code.
         </p>
@@ -414,9 +414,9 @@ export function LoginForm() {
         <button
           type="button"
           onClick={() => { setStep('classic'); setGeneralError('') }}
-          className="text-sm text-text-tertiary hover:text-text-secondary transition-colors"
+          className="text-base text-text-tertiary hover:text-text-secondary transition-colors"
         >
-          Sign in with password instead
+          Back to password sign-in
         </button>
       </div>
     </div>

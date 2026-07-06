@@ -214,6 +214,19 @@ def build_download_filename(display_name: str, source: str | None) -> str:
     return f"{display_name}{ext}"
 
 
+def generate_presigned_put_url(s3_key: str, content_type: str | None = None, expires_in: int = 3600) -> str:
+    """Generate a presigned PUT URL for browser-based upload.
+
+    Uses s3_public_endpoint so the URL is reachable from the browser
+    (e.g. https://public-host instead of http://localhost:9000).
+    """
+    s3 = _get_presign_client()
+    params: dict = {"Bucket": settings.s3_bucket, "Key": s3_key}
+    if content_type:
+        params["ContentType"] = content_type
+    return s3.generate_presigned_url("put_object", Params=params, ExpiresIn=expires_in)
+
+
 def generate_presigned_get_url(s3_key: str, expires_in: int = 3600, download_filename: str | None = None) -> str:
     """Generate a presigned GET URL for an object.
 

@@ -1,113 +1,146 @@
 'use client'
 
 import * as React from 'react'
-import { Palette, Upload, X, Check, RotateCcw, Moon, Sun } from 'lucide-react'
+import { Palette, Upload, RotateCcw, Check } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useBrandingStore } from '@/stores/branding-store'
-import { useThemeStore } from '@/stores/theme-store'
+import { getAccessToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { BrandingLogoUpload } from '@/components/settings/branding-logo-upload'
 
-function LogoUploadSlot({
-  label,
-  description,
-  logoUrl,
-  onUpload,
-  onRemove,
-  previewBg,
-}: {
-  label: string
-  description: string
-  logoUrl: string | null
-  onUpload: (url: string) => void
-  onRemove: () => void
-  previewBg: string
-}) {
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const result = ev.target?.result
-      if (typeof result === 'string') onUpload(result)
-    }
-    reader.readAsDataURL(file)
-    e.target.value = ''
-  }
-
-  return (
-    <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-bg-secondary">
-      {/* Preview */}
-      <div
-        className={`h-16 w-16 rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0 ${previewBg}`}
-      >
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={label} className="h-full w-full object-contain p-1" />
-        ) : (
-          <span className="text-xs text-text-tertiary text-center leading-tight px-1">No logo</span>
-        )}
-      </div>
-
-      {/* Info + actions */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text-primary">{label}</p>
-        <p className="text-xs text-text-tertiary mt-0.5 mb-3">{description}</p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/svg+xml,image/webp"
-            className="hidden"
-            onChange={handleFile}
-          />
-          <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-3.5 w-3.5" />
-            {logoUrl ? 'Replace' : 'Upload'}
-          </Button>
-          {logoUrl && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRemove}
-              className="text-status-error hover:text-status-error hover:bg-status-error/10"
-            >
-              <X className="h-3.5 w-3.5" />
-              Remove
-            </Button>
-          )}
-        </div>
-        <p className="text-2xs text-text-tertiary mt-2">PNG, JPG, SVG or WebP · Max 2 MB</p>
-      </div>
-    </div>
-  )
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 export default function BrandingPage() {
   const { user } = useAuthStore()
-  const { orgName, orgLogoDark, orgLogoLight, setOrgName, setOrgLogoDark, setOrgLogoLight, resetAll } = useBrandingStore()
-  const { theme } = useThemeStore()
+  const {
+    orgName,
+    orgLogoDark,
+    orgLogoLight,
+    faviconUrl,
+    appleIconUrl,
+    loginLogoUrl,
+    poweredByFreeframe,
+    setOrgName,
+    setOrgLogoDark,
+    setOrgLogoLight,
+    setFaviconUrl,
+    setAppleIconUrl,
+    setLoginLogoUrl,
+    setPoweredByFreeframe,
+    resetAll,
+    fetchBranding,
+  } = useBrandingStore()
 
   const [nameValue, setNameValue] = React.useState(orgName)
   const [nameSaved, setNameSaved] = React.useState(false)
-
-  React.useEffect(() => { setNameValue(orgName) }, [orgName])
-
-  function handleSaveName() {
-    const trimmed = nameValue.trim()
-    if (!trimmed) return
-    setOrgName(trimmed)
-    setNameSaved(true)
-    setTimeout(() => setNameSaved(false), 2000)
-  }
+  const [resetOpen, setResetOpen] = React.useState(false)
+  const [resetting, setResetting] = React.useState(false)
+  const [savingPowered, setSavingPowered] = React.useState(false)
+  const [savingName, setSavingName] = React.useState(false)
 
   const isAdmin = user?.is_superadmin
-  const hasCustomBranding = orgName !== 'FreeFrame' || orgLogoDark !== null || orgLogoLight !== null
 
-  // Which logo is active right now
-  const activeLogo = theme === 'light' ? (orgLogoLight ?? orgLogoDark) : (orgLogoDark ?? orgLogoLight)
+  React.useEffect(() => {
+    fetchBranding()
+  }, [fetchBranding])
+
+  React.useEffect(() => {
+    setNameValue(orgName)
+  }, [orgName])
+
+  async function handleSaveName() {
+    const trimmed = nameValue.trim()
+    if (!trimmed || trimmed === orgName) return
+    const token = getAccessToken()
+    setSavingName(true)
+    try {
+      const res = await fetch(`${API_URL}/instance/branding`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ org_name: trimmed }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      const data = await res.json()
+      setOrgName(data.org_name || trimmed)
+      setNameSaved(true)
+      setTimeout(() => setNameSaved(false), 2000)
+    } catch {
+      setNameSaved(false)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  async function handleTogglePowered(value: boolean) {
+    const token = getAccessToken()
+    setSavingPowered(true)
+    try {
+      const res = await fetch(`${API_URL}/instance/branding`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ powered_by_freeframe: value }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setPoweredByFreeframe(value)
+    } catch {
+      // revert on error
+    } finally {
+      setSavingPowered(false)
+    }
+  }
+
+  async function handleResetAll() {
+    const token = getAccessToken()
+    setResetting(true)
+    try {
+      const res = await fetch(`${API_URL}/instance/branding`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          org_name: 'FreeFrame',
+          logo_light_key: null,
+          logo_dark_key: null,
+          favicon_key: null,
+          apple_icon_key: null,
+          login_logo_key: null,
+          primary_color: null,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to reset')
+      const data = await res.json()
+      const { syncBranding } = useBrandingStore.getState()
+      syncBranding(data)
+      setNameValue('FreeFrame')
+      setResetOpen(false)
+    } catch {
+      // silent
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const hasCustomBranding =
+    orgName !== 'FreeFrame' ||
+    orgLogoDark !== null ||
+    orgLogoLight !== null ||
+    faviconUrl !== null ||
+    appleIconUrl !== null ||
+    loginLogoUrl !== null
+
+  const slotProps = {
+    disabled: !isAdmin,
+  }
 
   return (
     <div className="p-6 max-w-2xl space-y-8">
@@ -117,118 +150,327 @@ export default function BrandingPage() {
         </div>
         <div>
           <h1 className="text-lg font-semibold text-text-primary">Branding</h1>
-          <p className="text-sm text-text-secondary">Customize your workspace name and logo</p>
+          <p className="text-base text-text-secondary">
+            Customize your workspace name, logo, and identity
+          </p>
         </div>
       </div>
 
-      {/* Workspace name */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-text-primary">Workspace name</h2>
-        <div className="p-4 rounded-lg border border-border bg-bg-secondary space-y-3">
-          {isAdmin ? (
-            <div className="flex items-center gap-2">
-              <Input
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-                placeholder="e.g. Acme Studio"
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-                className="max-w-xs"
-              />
-              <Button
-                size="sm"
-                onClick={handleSaveName}
-                disabled={!nameValue.trim() || nameValue.trim() === orgName}
-              >
-                {nameSaved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-text-secondary">{orgName}</p>
-          )}
-          <p className="text-xs text-text-tertiary">
-            Shown in the sidebar. Defaults to &ldquo;FreeFrame&rdquo;.
+      {/* ── Section: Replace All ── */}
+      {isAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-text-secondary">Quick Upload</h2>
+          <p className="text-sm text-text-secondary -mt-1">
+            Upload one logo and we&apos;ll apply it everywhere. Or customize each slot individually below.
           </p>
-        </div>
+          <div className="p-4 rounded-lg border-2 border-dashed border-border bg-bg-secondary hover:border-accent/50 transition-colors">
+            <QuickUpload
+              onUpload={(url) => {
+                setOrgLogoLight(url)
+                setOrgLogoDark(url)
+                setFaviconUrl(url)
+                setAppleIconUrl(url)
+                setLoginLogoUrl(url)
+              }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ── Section: Logos & Icons ── */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-text-secondary">Logos & Icons</h2>
+        <p className="text-sm text-text-secondary -mt-1">
+          Upload logos for different contexts. Each slot can have its own image.
+        </p>
+        <div className="space-y-4">
+            {/* Greeting */}
+            <div className="p-4 rounded-lg border border-border bg-bg-secondary space-y-3">
+              <h3 className="text-sm font-medium text-text-secondary">Greeting</h3>
+              {isAdmin ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    placeholder="e.g. Acme Studio"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                    className="max-w-xs"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSaveName}
+                    loading={savingName}
+                    disabled={
+                      !nameValue.trim() || nameValue.trim() === orgName
+                    }
+                  >
+                    {nameSaved ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      'Save'
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-text-secondary">{orgName}</p>
+              )}
+              <p className="text-sm text-text-secondary">
+                Shown in the sidebar. Defaults to &ldquo;FreeFrame&rdquo;.
+              </p>
+            </div>
+
+            <BrandingLogoUpload
+              slotKey="logo_light"
+              label="Logo (Light bg)"
+              description="Used on light backgrounds — dark-colored logo"
+              acceptedFormats={['PNG', 'SVG', 'WebP']}
+              minResolution="256×256px"
+              guidance="Solid shapes work best."
+              currentUrl={orgLogoLight}
+              previewBg="bg-white"
+              {...slotProps}
+              onUpload={(url) => setOrgLogoLight(url)}
+              onRemove={() => setOrgLogoLight(null)}
+            />
+
+            <BrandingLogoUpload
+              slotKey="logo_dark"
+              label="Logo (Dark bg)"
+              description="Used on dark backgrounds — light-colored logo"
+              acceptedFormats={['PNG', 'SVG', 'WebP']}
+              minResolution="256×256px"
+              guidance="Solid shapes work best against dark backgrounds."
+              currentUrl={orgLogoDark}
+              previewBg="bg-zinc-900"
+              {...slotProps}
+              onUpload={(url) => setOrgLogoDark(url)}
+              onRemove={() => setOrgLogoDark(null)}
+            />
+
+            <BrandingLogoUpload
+              slotKey="favicon"
+              label="Favicon"
+              description="Browser tab icon"
+              acceptedFormats={['ICO', 'PNG']}
+              minResolution="32×32px"
+              guidance="Keep it simple — renders at 16-32px."
+              currentUrl={faviconUrl}
+              previewBg="bg-zinc-900"
+              {...slotProps}
+              onUpload={(url) => setFaviconUrl(url)}
+              onRemove={() => setFaviconUrl(null)}
+            />
+
+            <BrandingLogoUpload
+              slotKey="apple_icon"
+              label="Apple Touch Icon"
+              description="iOS home screen icon"
+              acceptedFormats={['PNG']}
+              minResolution="180×180px"
+              guidance="Shown when users add FreeFrame to iPhone home screen."
+              currentUrl={appleIconUrl}
+              previewBg="bg-zinc-900"
+              {...slotProps}
+              onUpload={(url) => setAppleIconUrl(url)}
+              onRemove={() => setAppleIconUrl(null)}
+            />
+
+            <BrandingLogoUpload
+              slotKey="login_logo"
+              label="Login Page Logo"
+              description="Custom logo for the login page (optional)"
+              acceptedFormats={['PNG', 'SVG', 'WebP']}
+              minResolution="512×512px"
+              guidance="If omitted, the main logo is used on the login page."
+              currentUrl={loginLogoUrl}
+              previewBg="bg-zinc-900"
+              {...slotProps}
+              onUpload={(url) => setLoginLogoUrl(url)}
+              onRemove={() => setLoginLogoUrl(null)}
+            />
+          </div>
       </section>
 
-      {/* Logo — per theme */}
+      {/* ── Section: Powered by FreeFrame ── */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-text-primary">Logo</h2>
-        <p className="text-xs text-text-tertiary -mt-1">
-          Upload separate logos for dark and light themes. If only one is set, it will be used for both.
-        </p>
-
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Moon className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">Dark theme</span>
-          </div>
-          <LogoUploadSlot
-            label="Dark theme logo"
-            description="Shown when the app is in dark mode. Use a light-colored logo."
-            logoUrl={orgLogoDark}
-            onUpload={isAdmin ? setOrgLogoDark : () => {}}
-            onRemove={isAdmin ? () => setOrgLogoDark(null) : () => {}}
-            previewBg="bg-zinc-900"
-          />
-
-          <div className="flex items-center gap-2 mt-4 mb-1">
-            <Sun className="h-3.5 w-3.5 text-text-tertiary" />
-            <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">Light theme</span>
-          </div>
-          <LogoUploadSlot
-            label="Light theme logo"
-            description="Shown when the app is in light mode. Use a dark-colored logo."
-            logoUrl={orgLogoLight}
-            onUpload={isAdmin ? setOrgLogoLight : () => {}}
-            onRemove={isAdmin ? () => setOrgLogoLight(null) : () => {}}
-            previewBg="bg-white"
-          />
-        </div>
-      </section>
-
-      {/* Live preview */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-text-primary">Preview</h2>
-        <p className="text-xs text-text-tertiary -mt-1">
-          Currently showing the <strong>{theme === 'light' ? 'light' : 'dark'}</strong> theme logo.
-        </p>
-        <div className="rounded-lg border border-border bg-bg-secondary p-4 flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-md overflow-hidden flex items-center justify-center bg-bg-tertiary shrink-0">
-            {activeLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={activeLogo} alt={orgName} className="h-full w-full object-contain" />
+        <h2 className="text-sm font-semibold text-text-secondary">
+          Powered by FreeFrame
+        </h2>
+        <div className="p-4 rounded-lg border border-border bg-bg-secondary space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                Show attribution
+              </p>
+              <p className="text-sm text-text-secondary">
+                Support FreeFrame by showing &ldquo;Powered by FreeFrame&rdquo;.
+              </p>
+            </div>
+            {isAdmin ? (
+              <button
+                onClick={() => handleTogglePowered(!poweredByFreeframe)}
+                disabled={savingPowered}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50 ${
+                  poweredByFreeframe ? 'bg-accent' : 'bg-bg-tertiary'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    poweredByFreeframe
+                      ? 'translate-x-[22px]'
+                      : 'translate-x-[2px]'
+                  }`}
+                />
+              </button>
             ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo-icon.png" alt="FreeFrame" className="h-6 w-6 object-contain logo-dark" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo-icon-dark.png" alt="FreeFrame" className="h-6 w-6 object-contain logo-light" />
-              </>
+              <span className="text-sm text-text-secondary">
+                {poweredByFreeframe ? 'On' : 'Off'}
+              </span>
             )}
           </div>
-          <span className="text-sm font-semibold text-text-primary tracking-tight">{orgName}</span>
         </div>
       </section>
 
-      {/* Reset */}
+
+
+      {/* ── Section: Reset ── */}
       {isAdmin && hasCustomBranding && (
         <section className="pt-2 border-t border-border">
           <Button
             variant="ghost"
             size="sm"
             className="text-status-error hover:text-status-error hover:bg-status-error/10 gap-1.5"
-            onClick={() => { resetAll(); setNameValue('FreeFrame') }}
+            onClick={() => setResetOpen(true)}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset to defaults
+            Reset all branding
           </Button>
         </section>
       )}
 
       {!isAdmin && (
-        <p className="text-xs text-text-tertiary">Only super admins can edit branding settings.</p>
+        <p className="text-xs text-text-tertiary">
+          Only super admins can edit branding settings.
+        </p>
       )}
+
+      <ConfirmDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="Reset all branding?"
+        description="Replace all branding with the FreeFrame defaults? Your custom logos and name will be cleared."
+        confirmLabel="Reset"
+        variant="danger"
+        loading={resetting}
+        onConfirm={handleResetAll}
+      />
+    </div>
+  )
+}
+
+function QuickUpload({
+  onUpload,
+}: {
+  onUpload: (url: string) => void
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setError(null)
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError('File must be under 2 MB')
+      return
+    }
+
+    const token = getAccessToken()
+    setUploading(true)
+    try {
+      const slots = ['logo-light', 'logo-dark', 'favicon', 'apple-icon', 'login-logo']
+      let lastUrl = ''
+
+      for (const slot of slots) {
+        // Step 1: Get presigned URL
+        const mimeType = encodeURIComponent(file.type || 'image/png')
+        const presignRes = await fetch(`${API_URL}/instance/branding/${slot}-upload?content_type=${mimeType}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!presignRes.ok) {
+          const errData = await presignRes.json().catch(() => ({}))
+          throw new Error(errData.detail || `Failed to get upload URL for ${slot}`)
+        }
+        const { upload_url: presignedUrl, key: s3Key } = await presignRes.json()
+
+        // Step 2: Upload to S3
+        const uploadRes = await fetch(presignedUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type },
+        })
+        if (!uploadRes.ok) throw new Error(`Failed to upload for ${slot}`)
+
+        // Step 3: Update branding with new key
+        const keyName = slot.replace(/-/g, '_') + '_key'
+        const updateBody: Record<string, string> = {}
+        updateBody[keyName] = s3Key
+        const updateRes = await fetch(`${API_URL}/instance/branding`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(updateBody),
+        })
+        if (!updateRes.ok) throw new Error(`Failed to save for ${slot}`)
+        const data = await updateRes.json()
+        lastUrl =
+          data.logo_light_url ||
+          data.logo_dark_url ||
+          data.favicon_url ||
+          data.apple_icon_url ||
+          data.login_logo_url ||
+          lastUrl
+      }
+
+      if (lastUrl) onUpload(lastUrl)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {error && <p className="text-xs text-status-error">{error}</p>}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/svg+xml,image/webp"
+        className="hidden"
+        onChange={handleFile}
+      />
+      <Button
+        variant="secondary"
+        size="lg"
+        loading={uploading}
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full max-w-xs"
+      >
+        <Upload className="h-4 w-4" />
+        {uploading ? 'Uploading...' : 'Upload your logo'}
+      </Button>
+      <p className="text-xs text-text-tertiary text-center">
+        PNG, SVG, or WebP · 512×512px+ · Transparent background
+        <br />
+        We&apos;ll apply it to all branding slots at once.
+      </p>
     </div>
   )
 }
