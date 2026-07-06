@@ -590,6 +590,7 @@ function LinkCreatedPhase({ result, allResults, onSelectResult, onDone, onAdvanc
     setShowSettings(false)
   }, [result.token, result.title])
   const [urlCopied, setUrlCopied] = React.useState(false)
+  const [urlCopyFailed, setUrlCopyFailed] = React.useState(false)
   const [layout, setLayout] = React.useState<'grid' | 'list'>('grid')
   const titleInputRef = React.useRef<HTMLInputElement>(null)
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -732,11 +733,21 @@ function LinkCreatedPhase({ result, allResults, onSelectResult, onDone, onAdvanc
               if (await copyToClipboard(shareUrl)) {
                 setUrlCopied(true)
                 setTimeout(() => setUrlCopied(false), 2000)
+              } else {
+                setUrlCopyFailed(true)
+                setTimeout(() => setUrlCopyFailed(false), 3000)
               }
             }}
             className="text-text-tertiary hover:text-text-primary transition-colors shrink-0"
+            aria-label={urlCopyFailed ? 'Copy failed' : 'Copy share URL'}
           >
-            {urlCopied ? <Check className="h-3.5 w-3.5 text-status-success" /> : <Copy className="h-3.5 w-3.5" />}
+            {urlCopied ? (
+              <Check className="h-3.5 w-3.5 text-status-success" />
+            ) : urlCopyFailed ? (
+              <X className="h-3.5 w-3.5 text-status-error" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
           </button>
           <select
             value={visibility}

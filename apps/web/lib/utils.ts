@@ -130,24 +130,25 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     textarea.style.top = '-9999px'
     document.body.appendChild(textarea)
 
-    // iOS Safari requires selection on editable elements
-    if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
-      textarea.contentEditable = 'true'
-      textarea.readOnly = false
-      const range = document.createRange()
-      range.selectNodeContents(textarea)
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      selection?.addRange(range)
-      textarea.setSelectionRange(0, text.length)
-    } else {
-      textarea.select()
-      textarea.setSelectionRange(0, text.length)
-    }
+    try {
+      // iOS Safari requires selection on editable elements
+      if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+        const range = document.createRange()
+        range.selectNodeContents(textarea)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        textarea.setSelectionRange(0, text.length)
+      } else {
+        textarea.select()
+        textarea.setSelectionRange(0, text.length)
+      }
 
-    const ok = document.execCommand('copy')
-    document.body.removeChild(textarea)
-    return ok
+      return document.execCommand('copy')
+    } finally {
+      // Always remove the off-screen node, even if selection/execCommand throws.
+      textarea.remove()
+    }
   } catch {
     return false
   }

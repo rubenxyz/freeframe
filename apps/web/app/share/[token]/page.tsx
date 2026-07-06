@@ -551,9 +551,12 @@ function ShareMediaViewer({ asset, token, streamUrl, streamLoading }: ShareMedia
           // Safari native HLS
           mediaEl!.src = resolvedUrl
         } else {
-          // Direct URL fallback (mp4, mp3, etc.)
-          mediaEl!.src = resolvedUrl
+          // Browser supports neither MSE (hls.js) nor native HLS playback
+          setFatalError('HLS playback is not supported in this browser')
         }
+      })
+      .catch(() => {
+        if (!cancelled) setFatalError('Failed to load video player')
       })
     }
 
@@ -564,6 +567,12 @@ function ShareMediaViewer({ asset, token, streamUrl, streamLoading }: ShareMedia
     }
 
     function handleMediaError() {
+      // Tear down hls.js (if it's driving playback) so it doesn't keep fetching
+      // segments into the now-detached element once the error UI replaces it.
+      if (hls) {
+        hls.destroy()
+        hls = null
+      }
       setFatalError('Media playback failed')
     }
     mediaEl.addEventListener('error', handleMediaError)
