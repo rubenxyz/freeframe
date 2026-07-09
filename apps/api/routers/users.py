@@ -129,16 +129,14 @@ def confirm_avatar_upload(
     s3_key = body.get("key")
     if not s3_key:
         raise HTTPException(status_code=400, detail="key is required")
-    # Delete old avatar from S3 if it was stored under our prefix
-    if user.avatar_url and "avatars/" in (user.avatar_url or ""):
+    if not s3_key.startswith(f"avatars/{user_id}/"):
+        raise HTTPException(status_code=400, detail="Invalid key for this user")
+    if user.avatar_url:
         try:
-            old_key = "avatars/" + user.avatar_url.split("avatars/")[1].split("?")[0]
-            s3_service.delete_object(old_key)
+            s3_service.delete_object(user.avatar_url)
         except Exception:
             pass
-    # Generate a long-lived presigned GET URL for the new avatar
-    avatar_url = s3_service.generate_presigned_get_url(s3_key, expires_in=604800)
-    user.avatar_url = avatar_url
+    user.avatar_url = s3_key
     db.commit()
     db.refresh(user)
     return user
