@@ -258,6 +258,8 @@ def change_password(
     current_user: User = Depends(get_current_user),
 ):
     """Change password for authenticated user."""
+    if current_user.password_hash is None:
+        raise HTTPException(status_code=400, detail="No password set for this account; use set-password instead")
     if not verify_password(body.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
