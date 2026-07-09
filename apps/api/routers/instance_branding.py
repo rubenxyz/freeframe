@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -12,7 +12,6 @@ from ..schemas.instance_branding import (
     InstanceBrandingLogoUploadResponse,
 )
 from ..services import s3_service
-from ..config import settings
 
 router = APIRouter(tags=["instance_branding"])
 
@@ -109,6 +108,10 @@ def upsert_instance_branding(
 )
 def get_logo_upload_url(
     logo_type: str,
+    content_type: str = Query(
+        default=None,
+        description="MIME type of the logo file (e.g. image/png). If omitted, ContentType is not included in the presigned signature — S3 will accept any MIME type the browser sends.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -122,17 +125,8 @@ def get_logo_upload_url(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid logo type. Must be one of: {', '.join(LOGO_CONTENT_TYPES.keys())}"
         )
-    content_type = LOGO_CONTENT_TYPES[logo_type]
     key = f"branding/{logo_type}/{uuid.uuid4()}"
-    upload_url = s3_service.get_s3_client().generate_presigned_url(
-        "put_object",
-        Params={
-            "Bucket": settings.s3_bucket,
-            "Key": key,
-            "ContentType": content_type,
-        },
-        ExpiresIn=3600,
-    )
+    upload_url = s3_service.generate_presigned_put_url(key, content_type=content_type, expires_in=3600)
     return InstanceBrandingLogoUploadResponse(upload_url=upload_url, key=key)
 
 
