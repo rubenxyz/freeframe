@@ -28,10 +28,18 @@ class UserResponse(BaseModel):
     status: UserStatus
     email_verified: bool = False
     is_superadmin: bool = False
-    invite_token: str | None = None
     preferences: dict = {}
 
     model_config = {"from_attributes": True}
+
+
+class AdminUserResponse(UserResponse):
+    """Admin-scoped user view. Extends UserResponse with the invite token,
+    which is a credential — it must never be exposed to non-admin callers
+    (see SECURITY_AUDIT C1: any-authenticated-user endpoints that returned
+    UserResponse leaked invite tokens, enabling account takeover via
+    /auth/accept-invite)."""
+    invite_token: str | None = None
 
 class InviteRequest(BaseModel):
     email: EmailStr

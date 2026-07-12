@@ -4,7 +4,7 @@ import uuid
 import secrets
 from datetime import datetime, timezone, timedelta
 from ..database import get_db
-from ..schemas.auth import UserResponse, InviteRequest, UpdateProfileRequest
+from ..schemas.auth import UserResponse, AdminUserResponse, InviteRequest, UpdateProfileRequest
 from ..models.user import User, UserStatus
 from ..middleware.auth import get_current_user
 from ..services.auth_service import hash_password, get_user_by_email
@@ -51,7 +51,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
-@router.post("/invite", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/invite", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
 def invite_user(body: InviteRequest, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     if get_user_by_email(db, body.email):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -93,7 +93,7 @@ def update_user(user_id: uuid.UUID, body: UpdateProfileRequest, db: Session = De
     db.refresh(user)
     return user
 
-@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/{user_id}/deactivate", response_model=AdminUserResponse)
 def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not user:
@@ -103,7 +103,7 @@ def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User =
     db.refresh(user)
     return user
 
-@router.patch("/{user_id}/reactivate", response_model=UserResponse)
+@router.patch("/{user_id}/reactivate", response_model=AdminUserResponse)
 def reactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not user:
