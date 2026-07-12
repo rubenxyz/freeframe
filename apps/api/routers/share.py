@@ -34,6 +34,7 @@ from ..schemas.share import (
     ShareLinkResponse,
     ShareLinkUpdate,
     ShareLinkValidateResponse,
+    ShareVerifyRequest,
 )
 from ..services.permissions import require_project_role, validate_share_link, validate_share_link_with_session
 from ..services.redis_service import create_share_session
@@ -400,7 +401,7 @@ def validate_share_link_endpoint(
 )
 def verify_share_link_password(
     token: str,
-    body: "ShareVerifyRequest",
+    body: ShareVerifyRequest,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
@@ -411,12 +412,6 @@ def verify_share_link_password(
     so it isn't logged by nginx, browser history, Referer headers, or proxy
     logs. See SECURITY_AUDIT H3.
     """
-    from ..schemas.share import ShareVerifyRequest  # local import to avoid cycle at module load
-    # Re-validate the body with the schema (FastAPI already does this, but
-    # keeps the import above meaningful in case the type annotation is
-    # stripped by tooling).
-    _ = ShareVerifyRequest.model_validate(body)
-
     link = validate_share_link(db, token)
 
     # Authenticated link creator bypasses the password (dashboard preview)
