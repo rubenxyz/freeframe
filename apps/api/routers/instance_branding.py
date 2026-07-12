@@ -102,8 +102,25 @@ def upsert_instance_branding(
         )
     branding = _get_or_create_instance_branding(db)
     update_data = body.model_dump(exclude_unset=True)
+
+    _LOGO_KEY_FIELDS = [
+        "logo_light_key",
+        "logo_dark_key",
+        "favicon_key",
+        "apple_icon_key",
+        "login_logo_key",
+    ]
+
     for field, value in update_data.items():
+        if field in _LOGO_KEY_FIELDS and value is not None:
+            old_key = getattr(branding, field)
+            if old_key and old_key != value:
+                try:
+                    s3_service.delete_object(old_key)
+                except Exception:
+                    pass
         setattr(branding, field, value)
+
     db.commit()
     db.refresh(branding)
     return _enrich_branding_response(branding)

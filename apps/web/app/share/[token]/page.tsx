@@ -894,6 +894,13 @@ function ShareViewer({
       .finally(() => setStreamLoading(false))
   }, [token, asset.asset_type, asset.stream_url, asset.id])
 
+  /*
+   * Branding cascade for the share page top-bar title:
+   *   1. shareName — per-share override (set when creating the share link)
+   *   2. branding?.custom_title — per-project ProjectBranding override
+   *   3. orgName — instance-level org_name from InstanceBranding
+   *   4. 'FreeFrame' — hardcoded fallback
+   */
   const displayName = shareName || branding?.custom_title || orgName || 'FreeFrame'
 
   return (

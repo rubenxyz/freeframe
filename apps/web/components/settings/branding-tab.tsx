@@ -7,6 +7,7 @@ import { useBrandingStore } from '@/stores/branding-store'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { BrandingLogoUpload } from '@/components/settings/branding-logo-upload'
 
@@ -115,6 +116,7 @@ export function BrandingTab() {
     appleIconUrl,
     loginLogoUrl,
     poweredByFreeframe,
+    primaryColor,
     setOrgName,
     setOrgLogoDark,
     setOrgLogoLight,
@@ -122,6 +124,7 @@ export function BrandingTab() {
     setAppleIconUrl,
     setLoginLogoUrl,
     setPoweredByFreeframe,
+    setPrimaryColor,
     resetAll,
     fetchBranding,
   } = useBrandingStore()
@@ -132,6 +135,8 @@ export function BrandingTab() {
   const [resetting, setResetting] = React.useState(false)
   const [savingPowered, setSavingPowered] = React.useState(false)
   const [savingName, setSavingName] = React.useState(false)
+  const [savingColor, setSavingColor] = React.useState(false)
+  const [colorValue, setColorValue] = React.useState(primaryColor || '')
 
   const isAdmin = user?.is_superadmin
 
@@ -140,8 +145,10 @@ export function BrandingTab() {
   }, [fetchBranding])
 
   React.useEffect(() => {
-    setNameValue(orgName)
-  }, [orgName])
+    const state = useBrandingStore.getState()
+    setNameValue(state.orgName)
+    setColorValue(state.primaryColor || '')
+  }, [orgName, primaryColor])
 
   async function handleSaveName() {
     const trimmed = nameValue.trim()
@@ -168,6 +175,23 @@ export function BrandingTab() {
       // revert on error
     } finally {
       setSavingPowered(false)
+    }
+  }
+
+  async function handleSaveColor() {
+    const trimmed = colorValue.trim()
+    if (!trimmed || trimmed === primaryColor) return
+    if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
+      return
+    }
+    setSavingColor(true)
+    try {
+      await api.put('/instance/branding', { primary_color: trimmed })
+      setPrimaryColor(trimmed)
+    } catch {
+      // silent
+    } finally {
+      setSavingColor(false)
     }
   }
 
@@ -355,6 +379,48 @@ export function BrandingTab() {
           </div>
       </section>
 
+      {/* ── Section: Primary Color ── */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-text-secondary">
+          Primary Color
+        </h2>
+        <div className="p-4 rounded-lg border border-border bg-bg-secondary space-y-3">
+          <p className="text-sm text-text-secondary">
+            Set a custom accent color for your instance. Used as a CSS variable (<code>--ff-primary</code>).
+          </p>
+          {isAdmin ? (
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={colorValue || '#7c3aed'}
+                onChange={(e) => setColorValue(e.target.value)}
+                className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent p-0.5"
+              />
+              <Input
+                value={colorValue}
+                onChange={(e) => setColorValue(e.target.value)}
+                placeholder="#7c3aed"
+                maxLength={7}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveColor()}
+                className="max-w-[140px] font-mono text-sm"
+              />
+              <Button
+                size="sm"
+                onClick={handleSaveColor}
+                loading={savingColor}
+                disabled={!colorValue.trim() || colorValue.trim() === primaryColor || !/^#[0-9A-Fa-f]{6}$/.test(colorValue.trim())}
+              >
+                Save
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm font-mono text-text-secondary">
+              {primaryColor || '#7c3aed'}
+            </p>
+          )}
+        </div>
+      </section>
+
       {/* ── Section: Powered by FreeFrame ── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-text-secondary">
@@ -371,21 +437,11 @@ export function BrandingTab() {
               </p>
             </div>
             {isAdmin ? (
-              <button
-                onClick={() => handleTogglePowered(!poweredByFreeframe)}
+              <Switch
+                checked={poweredByFreeframe}
+                onCheckedChange={handleTogglePowered}
                 disabled={savingPowered}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50 ${
-                  poweredByFreeframe ? 'bg-accent' : 'bg-bg-tertiary'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                    poweredByFreeframe
-                      ? 'translate-x-[22px]'
-                      : 'translate-x-[2px]'
-                  }`}
-                />
-              </button>
+              />
             ) : (
               <span className="text-sm text-text-secondary">
                 {poweredByFreeframe ? 'On' : 'Off'}

@@ -3,7 +3,6 @@
 import * as React from 'react'
 import { useBrandingStore } from '@/stores/branding-store'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 const DATA_ATTR = 'data-ff-branding'
 
 function setLink(rel: string, href: string | null) {
@@ -25,7 +24,7 @@ function setLink(rel: string, href: string | null) {
 }
 
 export function BrandingHead() {
-  const { orgName, faviconUrl, appleIconUrl, fetchBranding, loaded } =
+  const { orgName, faviconUrl, appleIconUrl, primaryColor, fetchBranding, loaded } =
     useBrandingStore()
 
   React.useEffect(() => {
@@ -41,6 +40,14 @@ export function BrandingHead() {
 
   React.useEffect(() => { setLink('icon', faviconUrl) }, [faviconUrl])
   React.useEffect(() => { setLink('apple-touch-icon', appleIconUrl) }, [appleIconUrl])
+
+  React.useEffect(() => {
+    if (primaryColor) {
+      document.documentElement.style.setProperty('--ff-primary', primaryColor)
+    } else {
+      document.documentElement.style.removeProperty('--ff-primary')
+    }
+  }, [primaryColor])
 
   return null
 }

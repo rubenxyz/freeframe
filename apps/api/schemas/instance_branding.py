@@ -14,6 +14,15 @@ def _validate_hex_color(v: Optional[str]) -> Optional[str]:
 
 class InstanceBrandingUpdate(BaseModel):
     org_name: Optional[str] = None
+
+    @field_validator("org_name", mode="before")
+    @classmethod
+    def validate_org_name(cls, v):
+        if v is not None:
+            length = len(v)
+            if length < 1 or length > 255:
+                raise ValueError("org_name must be between 1 and 255 characters")
+        return v
     logo_light_key: Optional[str] = None
     logo_dark_key: Optional[str] = None
     favicon_key: Optional[str] = None
