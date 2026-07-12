@@ -41,26 +41,28 @@ def send_magic_code(body: SendMagicCodeRequest, db: Session = Depends(get_db)):
     """
     Send magic code to email.
     - If user exists: send code for login
-    - If user doesn't exist: create pending user and send code
+    - If user doesn't exist: return a constant-shape response without
+      sending an email or creating an account. New accounts come from
+      /setup (first superadmin) or an admin invite; allowing anonymous
+      account creation here enabled enumeration, Resend-quota abuse, and
+      takeover of a fresh install via first-user-becomes-superadmin.
     """
     user = get_user_by_email(db, body.email)
-    
+
     if not user:
-        # Check if this is the first user (becomes super admin)
-        user_count = db.query(User).filter(User.deleted_at.is_(None)).count()
-        is_first_user = user_count == 0
-        
-        # Create new user in pending_verification status
-        user = User(
+        # Do not auto-create accounts from magic-code requests. Previously
+        # this branch created a pending_verification user for any email
+        # entered (and the first such user became superadmin), allowing an
+        # anonymous visitor to enumerate accounts, drain the email
+        # provider's quota, and on a fresh install become the first
+        # superadmin by being first. New accounts come from /setup
+        # (first superadmin) or admin invites.
+        # Constant-shape response prevents user enumeration.
+        return SendMagicCodeResponse(
+            message="If that email has an account, a magic code has been sent.",
             email=body.email,
-            name=body.email.split("@")[0],  # Temporary name from email
-            status=UserStatus.pending_verification,
-            email_verified=False,
-            is_superadmin=is_first_user,  # First user becomes super admin
         )
-        db.add(user)
-        db.commit()
-    
+
     # Generate and store magic code in Redis
     code = generate_magic_code()
     store_magic_code(body.email, code)
@@ -70,9 +72,11 @@ def send_magic_code(body: SendMagicCodeRequest, db: Session = Depends(get_db)):
         send_task_safe(send_magic_code_email, body.email, code, MAGIC_CODE_EXPIRY_MINUTES)
     except Exception:
         pass  # Email delivery is best-effort; code is already in Redis
-    
+
+    # Same message shape as the unknown-email branch above to prevent
+    # user enumeration via response text.
     return SendMagicCodeResponse(
-        message="Magic code sent to your email",
+        message="If that email has an account, a magic code has been sent.",
         email=body.email,
     )
 
@@ -84,10 +88,13 @@ def verify_magic_code(body: VerifyMagicCodeRequest, db: Session = Depends(get_db
     Returns needs_password=True if user hasn't set a password yet.
     """
     user = get_user_by_email(db, body.email)
-    
+
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
+        # Return 401 with the same detail verify_magic_code returns for a
+        # bad code, so unknown emails cannot be enumerated via the 404
+        # "User not found" path that existed before.
+        raise HTTPException(status_code=401, detail="Invalid code")
+
     if user.status == UserStatus.deactivated:
         raise HTTPException(status_code=401, detail="Account deactivated")
     
