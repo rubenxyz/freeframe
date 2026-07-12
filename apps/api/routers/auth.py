@@ -10,6 +10,7 @@ from ..schemas.auth import (
     SendMagicCodeRequest, SendMagicCodeResponse,
     VerifyMagicCodeRequest, SetPasswordRequest,
     AcceptInviteRequest, InviteInfoResponse,
+    PreferencesUpdate,
 )
 from ..services.auth_service import (
     hash_password, verify_password,
@@ -242,13 +243,16 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.patch("/me/preferences", response_model=UserResponse)
 def update_preferences(
-    body: dict,
+    body: PreferencesUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Update user preferences (theme, etc). Merges with existing preferences."""
     current_prefs = current_user.preferences or {}
-    current_prefs.update(body)
+    # Only known keys are accepted by PreferencesUpdate; merge them onto
+    # existing prefs so unspecified keys are preserved.
+    update_data = body.model_dump(exclude_unset=True)
+    current_prefs.update(update_data)
     current_user.preferences = current_prefs
     # Force SQLAlchemy to detect the JSON change
     from sqlalchemy.orm.attributes import flag_modified

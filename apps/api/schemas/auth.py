@@ -87,3 +87,14 @@ class UpdateUserRoleRequest(BaseModel):
 class DeactivateUserRequest(BaseModel):
     user_id: uuid.UUID
 
+
+class PreferencesUpdate(BaseModel):
+    """Schema-constrained preferences update.
+
+    Replaces the previous `body: dict` signature on PATCH /auth/me/preferences
+    so users can't store arbitrary giant/nested values (which would also be a
+    stored-XSS surface if any preference is rendered back without escaping).
+    Known keys only, primitive values only.
+    """
+    theme: str | None = None
+
