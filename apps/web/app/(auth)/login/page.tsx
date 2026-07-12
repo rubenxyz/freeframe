@@ -54,41 +54,39 @@ export default function LoginPage() {
   const displayLogo = loginLogoUrl || (theme === 'dark' ? (orgLogoDark ?? orgLogoLight) : (orgLogoLight ?? orgLogoDark)) || undefined
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg-primary">
-      <div className="w-full max-w-sm px-4">
-        {/* Branding header */}
-        <div className="mb-8 text-center">
-          {displayLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={displayLogo}
-              alt={orgName}
-              className="h-12 mx-auto mb-3 object-contain"
-              onError={(e) => {
-                const target = e.currentTarget
-                if (target.src !== `/logo-full.svg`) {
-                  target.src = `/logo-full.svg`
-                }
-              }}
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={`/logo-full.svg`}
-              alt="FreeFrame"
-              className="h-12 mx-auto mb-3 object-contain"
-            />
-          )}
-          <h1 className="text-xl font-semibold text-text-primary">
-            {orgName}
-          </h1>
-        </div>
-
-        <LoginForm />
-
-        {/* Powered by FreeFrame */}
-        <PoweredByBadge className="mt-8 text-center justify-center" />
+    <>
+      {/* Branding header */}
+      <div className="mb-8 text-center">
+        {displayLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={displayLogo}
+            alt={orgName}
+            className="h-12 mx-auto mb-3 object-contain"
+            onError={(e) => {
+              const target = e.currentTarget
+              if (target.src !== `/logo-full.svg`) {
+                target.src = `/logo-full.svg`
+              }
+            }}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/logo-full.svg`}
+            alt="FreeFrame"
+            className="h-12 mx-auto mb-3 object-contain"
+          />
+        )}
+        <h1 className="text-xl font-semibold text-text-primary">
+          {orgName}
+        </h1>
       </div>
-    </div>
+
+      <LoginForm />
+
+      {/* Powered by FreeFrame */}
+      <PoweredByBadge className="mt-6 text-center justify-center w-full" />
+    </>
   )
 }

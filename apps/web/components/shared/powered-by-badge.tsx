@@ -55,7 +55,7 @@ export function PoweredByBadge({
   return (
     <p
       className={cn(
-        'inline-flex items-center gap-1.5 text-xs text-white',
+        'inline-flex items-center gap-1.5 text-xs text-text-tertiary',
         className,
       )}
     >

@@ -4,13 +4,11 @@ import * as React from 'react'
 import { Palette, Upload, RotateCcw, Check } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useBrandingStore } from '@/stores/branding-store'
-import { getAccessToken } from '@/lib/auth'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { BrandingLogoUpload } from '@/components/settings/branding-logo-upload'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 export default function BrandingPage() {
   const { user } = useAuthStore()
@@ -53,19 +51,9 @@ export default function BrandingPage() {
   async function handleSaveName() {
     const trimmed = nameValue.trim()
     if (!trimmed || trimmed === orgName) return
-    const token = getAccessToken()
     setSavingName(true)
     try {
-      const res = await fetch(`${API_URL}/instance/branding`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ org_name: trimmed }),
-      })
-      if (!res.ok) throw new Error('Failed to save')
-      const data = await res.json()
+      const data = await api.put<{ org_name: string }>('/instance/branding', { org_name: trimmed })
       setOrgName(data.org_name || trimmed)
       setNameSaved(true)
       setTimeout(() => setNameSaved(false), 2000)
@@ -77,18 +65,9 @@ export default function BrandingPage() {
   }
 
   async function handleTogglePowered(value: boolean) {
-    const token = getAccessToken()
     setSavingPowered(true)
     try {
-      const res = await fetch(`${API_URL}/instance/branding`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ powered_by_freeframe: value }),
-      })
-      if (!res.ok) throw new Error('Failed to save')
+      await api.put('/instance/branding', { powered_by_freeframe: value })
       setPoweredByFreeframe(value)
     } catch {
       // revert on error
@@ -98,29 +77,19 @@ export default function BrandingPage() {
   }
 
   async function handleResetAll() {
-    const token = getAccessToken()
     setResetting(true)
     try {
-      const res = await fetch(`${API_URL}/instance/branding`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          org_name: 'FreeFrame',
-          logo_light_key: null,
-          logo_dark_key: null,
-          favicon_key: null,
-          apple_icon_key: null,
-          login_logo_key: null,
-          primary_color: null,
-        }),
+      const data = await api.put('/instance/branding', {
+        org_name: 'FreeFrame',
+        logo_light_key: null,
+        logo_dark_key: null,
+        favicon_key: null,
+        apple_icon_key: null,
+        login_logo_key: null,
+        primary_color: null,
       })
-      if (!res.ok) throw new Error('Failed to reset')
-      const data = await res.json()
       const { syncBranding } = useBrandingStore.getState()
-      syncBranding(data)
+      syncBranding(data as never)
       setNameValue('FreeFrame')
       setResetOpen(false)
     } catch {
@@ -388,7 +357,6 @@ function QuickUpload({
       return
     }
 
-    const token = getAccessToken()
     setUploading(true)
     try {
       const slots = ['logo-light', 'logo-dark', 'favicon', 'apple-icon', 'login-logo']
@@ -397,15 +365,10 @@ function QuickUpload({
       for (const slot of slots) {
         // Step 1: Get presigned URL
         const mimeType = encodeURIComponent(file.type || 'image/png')
-        const presignRes = await fetch(`${API_URL}/instance/branding/${slot}-upload?content_type=${mimeType}`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!presignRes.ok) {
-          const errData = await presignRes.json().catch(() => ({}))
-          throw new Error(errData.detail || `Failed to get upload URL for ${slot}`)
-        }
-        const { upload_url: presignedUrl, key: s3Key } = await presignRes.json()
+        const presignData = await api.post<{ upload_url: string; key: string }>(
+          `/instance/branding/${slot}-upload?content_type=${mimeType}`
+        )
+        const { upload_url: presignedUrl, key: s3Key } = presignData
 
         // Step 2: Upload to S3
         const uploadRes = await fetch(presignedUrl, {
@@ -419,16 +382,13 @@ function QuickUpload({
         const keyName = slot.replace(/-/g, '_') + '_key'
         const updateBody: Record<string, string> = {}
         updateBody[keyName] = s3Key
-        const updateRes = await fetch(`${API_URL}/instance/branding`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updateBody),
-        })
-        if (!updateRes.ok) throw new Error(`Failed to save for ${slot}`)
-        const data = await updateRes.json()
+        const data = await api.put<{
+          logo_light_url?: string
+          logo_dark_url?: string
+          favicon_url?: string
+          apple_icon_url?: string
+          login_logo_url?: string
+        }>('/instance/branding', updateBody)
         lastUrl =
           data.logo_light_url ||
           data.logo_dark_url ||

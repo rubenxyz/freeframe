@@ -2,10 +2,17 @@
 
 import * as React from 'react'
 import { Upload, X, Loader2 } from 'lucide-react'
-import { getAccessToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
+import { api } from '@/lib/api'
+
+const TYPE_MAP: Record<string, string> = {
+  logo_light: 'logo-light',
+  logo_dark: 'logo-dark',
+  favicon: 'favicon',
+  apple_icon: 'apple-icon',
+  login_logo: 'login-logo',
+}
 
 interface BrandingLogoUploadProps {
   slotKey: string
@@ -52,21 +59,15 @@ export function BrandingLogoUpload({
       return
     }
 
-    const token = getAccessToken()
     setUploading(true)
     try {
       // Step 1: Get presigned URL
       const uploadKey = slotKey.replace(/_/g, '-')
       const mimeType = encodeURIComponent(file.type || 'image/png')
-      const presignRes = await fetch(`${API_URL}/instance/branding/${uploadKey}-upload?content_type=${mimeType}`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!presignRes.ok) {
-        const errData = await presignRes.json().catch(() => ({}))
-        throw new Error(errData.detail || 'Failed to get upload URL')
-      }
-      const { upload_url: presignedUrl, key: s3Key } = await presignRes.json()
+      const presignData = await api.post<{ upload_url: string; key: string }>(
+        `/instance/branding/${uploadKey}-upload?content_type=${mimeType}`
+      )
+      const { upload_url: presignedUrl, key: s3Key } = presignData
 
       // Step 2: Upload to S3 via nginx proxy
       const uploadRes = await fetch(presignedUrl, {
@@ -79,19 +80,13 @@ export function BrandingLogoUpload({
       // Step 3: Update branding with new key
       const updateBody: Record<string, string> = {}
       updateBody[`${slotKey}_key`] = s3Key
-      const updateRes = await fetch(`${API_URL}/instance/branding`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(updateBody),
-      })
-      if (!updateRes.ok) {
-        const errData = await updateRes.json().catch(() => ({}))
-        throw new Error(errData.detail || 'Failed to save branding')
-      }
-      const updated: { logo_light_url?: string; logo_dark_url?: string; favicon_url?: string; apple_icon_url?: string; login_logo_url?: string } = await updateRes.json()
+      const updated = await api.put<{
+        logo_light_url?: string
+        logo_dark_url?: string
+        favicon_url?: string
+        apple_icon_url?: string
+        login_logo_url?: string
+      }>('/instance/branding', updateBody)
 
       // Extract the URL
       const urlKey = `${slotKey}_url`
@@ -108,14 +103,13 @@ export function BrandingLogoUpload({
 
   async function handleRemove() {
     setError(null)
-    const token = getAccessToken()
-    const type = slotKey.replace('logo_', '').replace('login_', 'login-').replace('_', '-')
+    const type = TYPE_MAP[slotKey]
+    if (!type) {
+      setError('Unknown logo type')
+      return
+    }
     try {
-      const res = await fetch(`${API_URL}/instance/branding/logo/${type}`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error('Failed to reset logo')
+      await api.delete(`/instance/branding/logo/${type}`)
       onRemove()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Reset failed')

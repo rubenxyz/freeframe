@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -14,6 +15,8 @@ from ..schemas.instance_branding import (
 from ..services import s3_service
 
 router = APIRouter(tags=["instance_branding"])
+
+_SINGLETON_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 LOGO_TYPES = {
     "logo-light": "logo_light_key",
@@ -33,13 +36,18 @@ LOGO_CONTENT_TYPES = {
 
 
 def _get_or_create_instance_branding(db: Session) -> InstanceBranding:
-    branding = db.query(InstanceBranding).first()
-    if not branding:
-        branding = InstanceBranding()
-        db.add(branding)
+    row = db.query(InstanceBranding).first()
+    if row:
+        return row
+    row = InstanceBranding(id=_SINGLETON_ID)
+    db.add(row)
+    try:
         db.commit()
-        db.refresh(branding)
-    return branding
+    except IntegrityError:
+        db.rollback()
+        return db.query(InstanceBranding).first()
+    db.refresh(row)
+    return row
 
 
 def _enrich_branding_response(branding: InstanceBranding) -> InstanceBrandingResponse:
@@ -93,7 +101,7 @@ def upsert_instance_branding(
             detail="Only admins can update instance branding"
         )
     branding = _get_or_create_instance_branding(db)
-    update_data = body.model_dump(exclude_none=True)
+    update_data = body.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(branding, field, value)
     db.commit()
