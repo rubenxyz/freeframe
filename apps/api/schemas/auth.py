@@ -1,15 +1,22 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 import uuid
 from ..models.user import UserStatus
+
+# Password constraints. bcrypt silently truncates at 72 bytes; surface
+# that as a 400 instead of letting longer passwords authenticate against
+# only their first 72 bytes. The 8-char floor closes the empty/1-char
+# password hole that let accounts be created with trivially-guessable
+# credentials.
+_PASSWORD_FIELD = Field(min_length=8, max_length=72)
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     name: str
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -58,12 +65,12 @@ class VerifyMagicCodeRequest(BaseModel):
     code: str
 
 class SetPasswordRequest(BaseModel):
-    password: str
+    password: str = _PASSWORD_FIELD
 
 # Invite flow
 class AcceptInviteRequest(BaseModel):
     token: str
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class InviteInfoResponse(BaseModel):
     email: str
