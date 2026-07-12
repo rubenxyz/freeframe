@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 
 @patch("apps.api.routers.comments._build_comment_response")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_array_for_asset_share(
     mock_validate,
     mock_build_comment_response,
@@ -32,7 +32,7 @@ def test_share_comments_returns_array_for_asset_share(
 
 
 @patch("apps.api.routers.comments._build_comment_response")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_array_for_folder_or_project_share_asset(
     mock_validate,
     mock_build_comment_response,
@@ -60,7 +60,7 @@ def test_share_comments_returns_array_for_folder_or_project_share_asset(
     mock_build_comment_response.assert_called_once_with(comment, mock_db)
 
 
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_empty_array_without_target_asset(
     mock_validate,
     client,
