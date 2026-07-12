@@ -88,7 +88,20 @@ def update_user(user_id: uuid.UUID, body: UpdateProfileRequest, db: Session = De
     if body.name is not None:
         user.name = body.name.strip()
     if body.avatar_url is not None:
-        user.avatar_url = body.avatar_url
+        # Defense-in-depth: avatar_url must be either null (clearing the
+        # avatar) or an S3 key scoped under avatars/{user_id}/ (the key
+        # shape issued by /users/me/avatar-upload, and the prefix the
+        # UserResponse field_validator assumes when resolving to a
+        # presigned GET). Allowing arbitrary values here would let a user
+        # mint a presigned GET for any private object in the bucket by
+        # setting avatar_url to its key.
+        prefix = f"avatars/{user_id}/"
+        if body.avatar_url != "" and not body.avatar_url.startswith(prefix):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"avatar_url must be an S3 key under {prefix} (or empty to clear)",
+            )
+        user.avatar_url = body.avatar_url or None
     db.commit()
     db.refresh(user)
     return user
