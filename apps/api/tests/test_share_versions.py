@@ -77,7 +77,7 @@ def test_guest_versions_returns_latest_only_when_hidden(
 
 
 @patch("apps.api.routers.comments._build_comment_response")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_accepts_version_id(
     mock_validate_link, mock_build, client, mock_db
 ):
@@ -98,7 +98,7 @@ def test_share_comments_accepts_version_id(
 
 
 @patch("apps.api.routers.comments._build_comment_response")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_accepts_latest_only(
     mock_validate_link, mock_build, client, mock_db
 ):

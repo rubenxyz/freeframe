@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -32,7 +32,7 @@ from ..schemas.comment import (
     ReactionResponse,
 )
 from ..services import s3_service
-from ..services.permissions import require_asset_access, validate_share_link
+from ..services.permissions import require_asset_access, validate_share_link_with_session
 from ..tasks.email_tasks import send_mention_email, send_comment_email
 from ..tasks.celery_app import send_task_safe
 
@@ -547,14 +547,20 @@ def list_share_comments(
     asset_id: Optional[uuid.UUID] = None,
     version_id: Optional[uuid.UUID] = None,
     latest_only: bool = False,
+    share_session: Optional[str] = Query(None, alias="share_session"),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """Public endpoint — list comments for a shared asset. No auth required.
+    """Public endpoint — list comments for a shared asset. No auth required
+    (but a password session OR authenticated link creator is required for
+    password-protected links, matching /share/{token}/assets).
     For folder/project shares, pass asset_id as query param to get comments for a specific asset.
     Pass version_id to scope comments to a single version (matches the authenticated review view).
     Pass latest_only=true to scope to the latest ready version — used by the folder/grid preview,
     which has no version picker."""
-    link = validate_share_link(db, token)
+    link = validate_share_link_with_session(
+        db, token, share_session=share_session, current_user=current_user
+    )
 
     # Determine the asset_id to list comments for
     target_asset_id = link.asset_id or asset_id
@@ -589,10 +595,13 @@ def list_share_comments(
 def guest_comment(
     token: str,
     body: GuestCommentCreate,
+    share_session: Optional[str] = Query(None, alias="share_session"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    link = validate_share_link(db, token)
+    link = validate_share_link_with_session(
+        db, token, share_session=share_session, current_user=current_user
+    )
 
     # Check share link permission allows commenting
     if link.permission == SharePermission.view:
