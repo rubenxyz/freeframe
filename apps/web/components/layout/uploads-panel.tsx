@@ -183,16 +183,18 @@ function UploadItem({ upload }: { upload: UploadFile }) {
 
 export function UploadsPanel() {
   const { files, panelOpen, setPanelOpen, clearCompleted, fetchHistory, fetchMoreHistory, historyHasMore, historyLoading } = useUploadStore()
-  const [filter, setFilter] = React.useState<FilterTab>('all')
+  const [filter, setFilter] = React.useState<FilterTab>('active')
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const sentinelRef = React.useRef<HTMLDivElement>(null)
 
-  // Fetch backend history when panel opens
+  // Fetch backend history only when viewing a non-Active tab. Active tab is
+  // fed by the live upload store — skip the API call so opening the panel
+  // does not dump old failed/completed uploads on screen.
   React.useEffect(() => {
-    if (panelOpen) {
+    if (panelOpen && filter !== 'active') {
       fetchHistory()
     }
-  }, [panelOpen, fetchHistory])
+  }, [panelOpen, filter, fetchHistory])
 
   // Infinite scroll — IntersectionObserver on sentinel
   React.useEffect(() => {
