@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Dev compose honors the environment for LAN/self-host testing** — `docker-compose.dev.yml` now reads `NEXT_PUBLIC_API_URL`, the S3 storage credentials/bucket/region, `S3_PUBLIC_ENDPOINT`, and `MINIO_CORS_ALLOW_ORIGIN` from the environment (falling back to the previous defaults), so the dev stack can point at a LAN IP or external storage without editing the compose file.
+- **Uploads panel now defaults to the Active tab** — opening the panel after an upload shows only in-progress items instead of dumping the full upload history on screen. Switch to the All/Complete/Failed tabs to view history as before.
 
 ### Fixed
 - **First-time sign-in no longer breaks at the set-password step** — after verifying a magic code, a brand-new user (one who hasn't set a password yet) was advanced to the "set password" screen but the tokens issued by `verify-magic-code` were discarded, so the follow-up `POST /auth/set-password` (which requires an authenticated user) returned 401 and bounced the user back to the login screen — never able to finish onboarding. The tokens are now persisted before the set-password step. The password-login form also validates the email format client-side, so a malformed address shows a friendly "Enter a valid email address" instead of surfacing the raw backend validation message.

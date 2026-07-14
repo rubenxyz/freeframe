@@ -187,18 +187,17 @@ export function UploadsPanel() {
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const sentinelRef = React.useRef<HTMLDivElement>(null)
 
-  // Fetch backend history only when viewing a non-Active tab. Active tab is
-  // fed by the live upload store — skip the API call so opening the panel
-  // does not dump old failed/completed uploads on screen.
+  // Fetch backend history when panel opens
   React.useEffect(() => {
-    if (panelOpen && filter !== 'active') {
+    if (panelOpen) {
       fetchHistory()
     }
-  }, [panelOpen, filter, fetchHistory])
+  }, [panelOpen, fetchHistory])
 
-  // Infinite scroll — IntersectionObserver on sentinel
+  // Infinite scroll — IntersectionObserver on sentinel (skip on Active tab
+  // since its items come from the live upload store, not paginated history)
   React.useEffect(() => {
-    if (!panelOpen) return
+    if (!panelOpen || filter === 'active') return
     const sentinel = sentinelRef.current
     if (!sentinel) return
 
@@ -212,7 +211,7 @@ export function UploadsPanel() {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [panelOpen, historyHasMore, historyLoading, fetchMoreHistory])
+  }, [panelOpen, filter, historyHasMore, historyLoading, fetchMoreHistory])
 
   if (!panelOpen) return null
 
@@ -332,8 +331,8 @@ export function UploadsPanel() {
                 </div>
               ))}
 
-              {/* Sentinel for infinite scroll + loading indicator */}
-              <div ref={sentinelRef} className="h-1" />
+              {/* Sentinel for infinite scroll + loading indicator (skip on Active tab) */}
+              {filter !== 'active' && <div ref={sentinelRef} className="h-1" />}
               {historyLoading && (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
