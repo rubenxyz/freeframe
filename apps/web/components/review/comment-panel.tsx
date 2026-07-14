@@ -50,6 +50,12 @@ interface CommentPanelProps {
   onRemoveReaction: (commentId: string, emoji: string) => Promise<void>;
   onReply: (parentId: string) => void;
   onSubmitReply?: (parentId: string, body: string) => Promise<void>;
+  /** Compare mode: route comment-timecode clicks to a pane-scoped transport instead of the global store. */
+  onSeekToTimecode?: (time: number, pause?: boolean) => void;
+  /** Compare mode: route annotation display to a pane-scoped overlay instead of the global store. */
+  onShowAnnotation?: (drawingData: Record<string, unknown> | null) => void;
+  /** Compare mode: export this pane's version instead of the store's currentVersion. */
+  exportVersionId?: string;
   className?: string;
 }
 
@@ -362,6 +368,8 @@ interface CommentItemProps {
   onReply: (parentId: string) => void;
   onCancelReply: () => void;
   onSubmitReply?: (parentId: string, body: string) => Promise<void>;
+  onSeekToTimecode?: (time: number, pause?: boolean) => void;
+  onShowAnnotation?: (drawingData: Record<string, unknown> | null) => void;
 }
 
 function CommentItem({
@@ -378,9 +386,13 @@ function CommentItem({
   onReply,
   onCancelReply,
   onSubmitReply,
+  onSeekToTimecode,
+  onShowAnnotation,
 }: CommentItemProps) {
-  const seekTo = useReviewStore((s) => s.seekTo);
+  const storeSeekTo = useReviewStore((s) => s.seekTo);
+  const seekTo = onSeekToTimecode ?? storeSeekTo;
   const setActiveAnnotation = useReviewStore((s) => s.setActiveAnnotation);
+  const showAnnotation = onShowAnnotation ?? setActiveAnnotation;
   const setFocusedCommentId = useReviewStore((s) => s.setFocusedCommentId);
   const itemRef = React.useRef<HTMLDivElement>(null);
   const [showReplies, setShowReplies] = React.useState(true);
@@ -462,7 +474,7 @@ function CommentItem({
         ) {
           seekTo(comment.timecode_start, true);
         }
-        setActiveAnnotation(
+        showAnnotation(
           comment.annotation ? comment.annotation.drawing_data : null,
         );
       }}
@@ -511,7 +523,7 @@ function CommentItem({
                     seekTo(comment.timecode_start!, true);
                     setFocusedCommentId(comment.id);
                     if (comment.annotation) {
-                      setActiveAnnotation(comment.annotation.drawing_data);
+                      showAnnotation(comment.annotation.drawing_data);
                     }
                   }}
                   title="Jump to timecode"
@@ -528,7 +540,7 @@ function CommentItem({
               <button
                 className="inline-flex items-center justify-center h-5 w-5 rounded text-purple-400/70 hover:text-purple-400 hover:bg-purple-500/15 transition-colors"
                 onClick={() => {
-                  setActiveAnnotation(comment.annotation!.drawing_data);
+                  showAnnotation(comment.annotation!.drawing_data);
                   setFocusedCommentId(comment.id);
                   if (
                     comment.timecode_start !== null &&
@@ -718,6 +730,8 @@ function CommentItem({
                   onReply={onReply}
                   onCancelReply={onCancelReply}
                   onSubmitReply={onSubmitReply}
+                  onSeekToTimecode={onSeekToTimecode}
+                  onShowAnnotation={onShowAnnotation}
                 />
               ))}
             </div>
@@ -731,7 +745,7 @@ function CommentItem({
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type CommentVisibility = "all" | "public" | "internal";
-type SortMode = "oldest" | "newest" | "commenter" | "completed";
+type SortMode = "timecode" | "oldest" | "newest" | "commenter" | "completed";
 
 interface FilterState {
   annotations: boolean;
@@ -763,6 +777,9 @@ export function CommentPanel({
   onRemoveReaction,
   onReply,
   onSubmitReply,
+  onSeekToTimecode,
+  onShowAnnotation,
+  exportVersionId,
   className,
 }: CommentPanelProps) {
   const focusedCommentId = useReviewStore((s) => s.focusedCommentId);
@@ -778,7 +795,7 @@ export function CommentPanel({
   const [sortOpen, setSortOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [sortMode, setSortMode] = React.useState<SortMode>("oldest");
+  const [sortMode, setSortMode] = React.useState<SortMode>("timecode");
   const [filters, setFilters] = React.useState<FilterState>(EMPTY_FILTERS);
   const [replyingTo, setReplyingTo] = React.useState<string | null>(null);
   const [exportOpen, setExportOpen] = React.useState(false);
@@ -852,7 +869,12 @@ export function CommentPanel({
         if (a.resolved && !b.resolved) return -1;
         if (!a.resolved && b.resolved) return 1;
       }
-      // Default: oldest / timecoded first
+      if (sortMode === "oldest")
+        return (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      // Default (sortMode === "timecode"): timecoded ascending, then
+      // untimecoded last (by created_at ascending).
       const aHasTime =
         a.timecode_start !== null && a.timecode_start !== undefined;
       const bHasTime =
@@ -885,11 +907,12 @@ export function CommentPanel({
 
   async function handleExport(format: ExportFormat, fps?: number) {
     setExportOpen(false);
-    if (!currentAsset || !currentVersion) return;
+    const versionId = exportVersionId ?? currentVersion?.id;
+    if (!currentAsset || !versionId) return;
     try {
       await exportComments({
         assetId: currentAsset.id,
-        versionId: currentVersion.id,
+        versionId,
         format,
         fps,
       });
@@ -1102,7 +1125,8 @@ export function CommentPanel({
                 Sort thread by...
               </div>
               {[
-                { id: "oldest" as const, label: "Oldest (Default)" },
+                { id: "timecode" as const, label: "Timecode (Default)" },
+                { id: "oldest" as const, label: "Oldest" },
                 { id: "newest" as const, label: "Newest" },
                 { id: "commenter" as const, label: "Commenter" },
                 { id: "completed" as const, label: "Completed" },
@@ -1279,6 +1303,8 @@ export function CommentPanel({
                 onReply={handleReply}
                 onCancelReply={() => setReplyingTo(null)}
                 onSubmitReply={onSubmitReply}
+                onSeekToTimecode={onSeekToTimecode}
+                onShowAnnotation={onShowAnnotation}
               />
             </div>
           ))}
