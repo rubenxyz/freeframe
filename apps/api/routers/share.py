@@ -5,8 +5,10 @@ from typing import Optional
 import bcrypt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 import sqlalchemy
 from sqlalchemy import func as sa_func, case
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -39,6 +41,7 @@ from ..services.permissions import require_project_role, validate_share_link, va
 from ..services.redis_service import create_share_session
 from ..services.s3_service import generate_presigned_get_url, build_download_filename
 from ..services.crypto_service import encrypt_password, decrypt_password
+from ..utils.short_code import generate_short_code
 from .hls_proxy import create_hls_token
 from ..models.project import Project, ProjectRole
 from ..tasks.email_tasks import send_share_email
@@ -46,6 +49,23 @@ from ..tasks.celery_app import send_task_safe
 from ..config import settings
 
 router = APIRouter(tags=["sharing"])
+
+MAX_SHORT_CODE_RETRIES = 3
+
+
+def _generate_unique_short_code(db: Session) -> str:
+    for _ in range(MAX_SHORT_CODE_RETRIES):
+        code = generate_short_code()
+        if not db.query(ShareLink).filter(ShareLink.short_code == code).first():
+            return code
+    raise RuntimeError(f"Failed to generate unique short code after {MAX_SHORT_CODE_RETRIES} attempts")
+
+
+def _short_share_url(link: ShareLink) -> str:
+    root = settings.frontend_url.split("/freeframe")[0].rstrip("/")
+    if link.short_code:
+        return f"{root}/{link.short_code}"
+    return f"{settings.frontend_url}/share/{link.token}"
 
 
 def _escape_like(s: str) -> str:
@@ -229,6 +249,7 @@ def create_share_link(
         show_versions=body.show_versions,
         show_watermark=body.show_watermark,
         appearance=body.appearance.model_dump(),
+        short_code=_generate_unique_short_code(db),
     )
     db.add(link)
     db.add(ActivityLog(user_id=current_user.id, asset_id=asset_id, action=ActivityAction.shared))
@@ -468,6 +489,23 @@ def revoke_share_link(
     db.commit()
 
 
+# ── Short code resolution ─────────────────────────────────────────────────────
+
+@router.get("/resolve/{short_code}")
+def resolve_short_code(
+    short_code: str,
+    db: Session = Depends(get_db),
+):
+    link = db.query(ShareLink).filter(
+        ShareLink.short_code == short_code,
+        ShareLink.deleted_at.is_(None),
+    ).first()
+    base = "/freeframe" if "/freeframe" in settings.frontend_url else ""
+    if not link:
+        return RedirectResponse(url=f"{base}/", status_code=302)
+    return RedirectResponse(url=f"{base}/share/{link.token}", status_code=302)
+
+
 # ── Folder share links ───────────────────────────────────────────────────────
 
 @router.post("/folders/{folder_id}/share", response_model=ShareLinkResponse, status_code=status.HTTP_201_CREATED)
@@ -504,6 +542,7 @@ def create_folder_share_link(
         show_versions=body.show_versions,
         show_watermark=body.show_watermark,
         appearance=body.appearance.model_dump(),
+        short_code=_generate_unique_short_code(db),
     )
     db.add(link)
     db.commit()
@@ -548,6 +587,7 @@ def create_project_share_link(
         show_versions=body.show_versions,
         show_watermark=body.show_watermark,
         appearance=body.appearance.model_dump(),
+        short_code=_generate_unique_short_code(db),
     )
     db.add(link)
     db.commit()
@@ -585,7 +625,8 @@ def share_project_with_user(
     shared_user = db.query(User).filter(User.id == user_id).first()
     if shared_user:
         if body.share_token:
-            project_link = f"{settings.frontend_url}/share/{body.share_token}"
+            link = db.query(ShareLink).filter(ShareLink.token == body.share_token).first()
+            project_link = _short_share_url(link) if link else f"{settings.frontend_url}/share/{body.share_token}"
         else:
             project_link = f"{settings.frontend_url}/projects/{project_id}"
         send_task_safe(send_share_email,
@@ -675,7 +716,8 @@ def share_folder_with_user(
     shared_user = db.query(User).filter(User.id == user_id).first()
     if shared_user:
         if body.share_token:
-            folder_link = f"{settings.frontend_url}/share/{body.share_token}"
+            link = db.query(ShareLink).filter(ShareLink.token == body.share_token).first()
+            folder_link = _short_share_url(link) if link else f"{settings.frontend_url}/share/{body.share_token}"
         else:
             folder_link = f"{settings.frontend_url}/projects/{folder.project_id}?folder={folder_id}"
         send_task_safe(send_share_email,
@@ -840,7 +882,8 @@ def share_with_user(
     if shared_user:
         # Use share link URL if token provided, otherwise internal URL
         if body.share_token:
-            asset_link = f"{settings.frontend_url}/share/{body.share_token}"
+            link = db.query(ShareLink).filter(ShareLink.token == body.share_token).first()
+            asset_link = _short_share_url(link) if link else f"{settings.frontend_url}/share/{body.share_token}"
         else:
             asset_link = f"{settings.frontend_url}/projects/{asset.project_id}/assets/{asset_id}"
         send_task_safe(send_share_email,
@@ -1160,6 +1203,7 @@ def create_multi_share_link(
         expires_at=body.expires_at,
         appearance=body.appearance.model_dump(),
         created_by=current_user.id,
+        short_code=_generate_unique_short_code(db),
     )
     db.add(link)
     db.flush()

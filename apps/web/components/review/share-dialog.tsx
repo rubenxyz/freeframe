@@ -187,7 +187,10 @@ function LinkTab({ assetId }: LinkTabProps) {
       );
       const newLink = res.share_link;
       const url =
-        newLink.url ?? `${window.location.origin}/share/${newLink.token}`;
+        newLink.url ??
+        (newLink.short_code
+          ? `${window.location.origin}/${newLink.short_code}`
+          : `${window.location.origin}/share/${newLink.token}`);
       setGeneratedUrl(url);
       setLinks((prev) => [...prev, { ...newLink, url }]);
     } catch (err) {
@@ -295,7 +298,9 @@ function LinkTab({ assetId }: LinkTabProps) {
               {links.map((link) => {
                 const linkUrl =
                   link.url ??
-                  `${typeof window !== "undefined" ? window.location.origin : ""}/share/${link.token}`;
+                  (link.short_code
+                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/${link.short_code}`
+                    : `${typeof window !== "undefined" ? window.location.origin : ""}/share/${link.token}`);
                 return (
                   <div
                     key={link.id}

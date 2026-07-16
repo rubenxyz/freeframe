@@ -25,6 +25,8 @@ export function ShareLinksTable({
   const [search, setSearch] = React.useState('')
   const [copiedToken, setCopiedToken] = React.useState<string | null>(null)
 
+  const rootUrl = React.useMemo(() => frontendUrl.replace(/\/freeframe\/?$/, ''), [frontendUrl])
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return shareLinks
@@ -32,14 +34,16 @@ export function ShareLinksTable({
   }, [shareLinks, search])
 
   const handleCopy = React.useCallback(
-    async (token: string, e: React.MouseEvent) => {
+    async (link: ShareLinkListItem, e: React.MouseEvent) => {
       e.stopPropagation()
-      const url = `${frontendUrl}/share/${token}`
+      const url = link.short_code
+        ? `${rootUrl}/${link.short_code}`
+        : `${frontendUrl}/share/${link.token}`
       await navigator.clipboard.writeText(url)
-      setCopiedToken(token)
+      setCopiedToken(link.token)
       setTimeout(() => setCopiedToken(null), 2000)
     },
-    [frontendUrl],
+    [frontendUrl, rootUrl],
   )
 
   return (
@@ -95,7 +99,9 @@ export function ShareLinksTable({
             </thead>
             <tbody>
               {filtered.map((link, i) => {
-                const shareUrl = `${frontendUrl}/share/${link.token}`
+                const shareUrl = link.short_code
+                  ? `${rootUrl}/${link.short_code}`
+                  : `${frontendUrl}/share/${link.token}`
                 const isCopied = copiedToken === link.token
                 const isLast = i === filtered.length - 1
 
@@ -131,7 +137,7 @@ export function ShareLinksTable({
                           {shareUrl}
                         </span>
                         <button
-                          onClick={(e) => handleCopy(link.token, e)}
+                          onClick={(e) => handleCopy(link, e)}
                           className="flex items-center justify-center h-6 w-6 rounded border border-border bg-bg-tertiary hover:bg-bg-hover text-text-tertiary hover:text-text-primary transition-colors shrink-0"
                           title="Copy link"
                         >

@@ -58,6 +58,7 @@ interface CreatedShareResult {
   assetId?: string | null
   folderId?: string | null
   projectId?: string | null
+  shortCode?: string | null
 }
 
 // ─── Asset type icon helper ──────────────────────────────────────────────────
@@ -610,8 +611,12 @@ function LinkCreatedPhase({ result, allResults, onSelectResult, onDone, onAdvanc
 
   const shareUrl =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/share/${result.token}`
-      : `/share/${result.token}`
+      ? result.shortCode
+        ? `${window.location.origin}/${result.shortCode}`
+        : `${window.location.origin}/share/${result.token}`
+      : result.shortCode
+        ? `/${result.shortCode}`
+        : `/share/${result.token}`
 
   async function handleSaveTitle() {
     if (!title.trim() || title === result.title) {

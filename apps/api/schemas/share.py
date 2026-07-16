@@ -63,6 +63,7 @@ class ShareLinkResponse(BaseModel):
     created_at: datetime
     has_password: bool = False
     password_value: Optional[str] = None  # Decrypted password for admin display only
+    short_code: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
