@@ -835,7 +835,7 @@ function ShareViewer({
   const [streamUrl, setStreamUrl] = React.useState<string | null>(asset.stream_url ?? null)
   const [streamLoading, setStreamLoading] = React.useState(false)
   const [commentKey, setCommentKey] = React.useState(0)
-  const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const [sidebarOpen, setSidebarOpen] = React.useState(typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches)
 
   // For video/audio assets, get a stream URL if not already provided
   React.useEffect(() => {
