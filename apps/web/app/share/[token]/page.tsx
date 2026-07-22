@@ -260,15 +260,17 @@ function GuestCommentItem({ comment }: GuestCommentItemProps) {
 interface GuestCommentListProps {
   token: string
   refreshKey: number
+  shareSession?: string | null
 }
 
-function GuestCommentList({ token, refreshKey }: GuestCommentListProps) {
+function GuestCommentList({ token, refreshKey, shareSession }: GuestCommentListProps) {
   const [comments, setComments] = React.useState<GuestComment[]>([])
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
     setLoading(true)
-    fetch(`${API_URL}/share/${token}/comments`)
+    const sp = shareSession ? `&share_session=${encodeURIComponent(shareSession)}` : ''
+    fetch(`${API_URL}/share/${token}/comments?_=1${sp}`)
       .then((r) => (r.ok ? r.json() : Promise.resolve([])))
       .then((data: CommentsResponse) => setComments(data))
       .catch(() => setComments([]))
@@ -749,7 +751,7 @@ function ShareRightPanel({
             </div>
 
             {/* Comment list */}
-            <GuestCommentList token={token} refreshKey={commentRefreshKey} />
+            <GuestCommentList token={token} refreshKey={commentRefreshKey} shareSession={shareSession} />
 
             {/* Approval actions */}
             {permission === 'approve' && (
@@ -763,6 +765,7 @@ function ShareRightPanel({
               <GuestCommentInput
                 token={token}
                 onCommentPosted={onCommentPosted}
+                shareSession={shareSession}
                 className="border-t border-white/[0.06] bg-[#141416]"
               />
             ) : (

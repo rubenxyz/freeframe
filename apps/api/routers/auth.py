@@ -92,18 +92,15 @@ def verify_magic_code(body: VerifyMagicCodeRequest, db: Session = Depends(get_db
     user = get_user_by_email(db, body.email)
 
     if not user:
-        # Return 401 with the same detail verify_magic_code returns for a
-        # bad code, so unknown emails cannot be enumerated via the 404
-        # "User not found" path that existed before.
-        raise HTTPException(status_code=401, detail="Invalid code")
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
 
     if user.status == UserStatus.deactivated:
-        raise HTTPException(status_code=401, detail="Account deactivated")
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
     
     # Verify magic code from Redis
     success, error = redis_verify_magic_code(body.email, body.code)
     if not success:
-        raise HTTPException(status_code=401, detail=error)
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
     
     # Mark email as verified
     user.email_verified = True

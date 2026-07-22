@@ -16,7 +16,12 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str = _PASSWORD_FIELD
+    # No min_length on login — a creation-side floor prevents new weak
+    # passwords, but refusing login for legacy accounts with shorter
+    # passwords would lock users out before auth even runs (422 instead
+    # of 401). bcrypt still truncates at 72 bytes silently; max_length=72
+    # surfaces that as a clear 422.
+    password: str = Field(max_length=72)
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -108,4 +113,5 @@ class PreferencesUpdate(BaseModel):
     Known keys only, primitive values only.
     """
     theme: str | None = None
+    notifications: dict | None = None
 

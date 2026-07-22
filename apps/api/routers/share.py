@@ -414,6 +414,17 @@ def verify_share_link_password(
     """
     link = validate_share_link(db, token)
 
+    # Check secure visibility — requires authenticated user (same gate as
+    # the GET endpoint). Without this, an anonymous caller who knows the
+    # password of a secure+password link could POST /verify and get the
+    # full response including asset_id and presigned stream URLs, bypassing
+    # the login requirement.
+    if link.visibility == "secure" and not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Authentication required for this link's visibility setting",
+        )
+
     # Authenticated link creator bypasses the password (dashboard preview)
     if not (current_user and link.created_by == current_user.id):
         if not link.password_hash:
