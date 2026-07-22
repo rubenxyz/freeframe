@@ -4,7 +4,7 @@ import uuid
 import secrets
 from datetime import datetime, timezone, timedelta
 from ..database import get_db
-from ..schemas.auth import UserResponse, InviteRequest, UpdateProfileRequest
+from ..schemas.auth import UserResponse, AdminUserResponse, InviteRequest, UpdateProfileRequest
 from ..models.user import User, UserStatus
 from ..middleware.auth import get_current_user
 from ..services.auth_service import hash_password, get_user_by_email
@@ -14,6 +14,15 @@ from ..config import settings
 from ..services import s3_service
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _escape_like(s: str) -> str:
+    """Escape special LIKE pattern characters so user-supplied search
+    text is matched literally (not as wildcards). Not SQL injection —
+    SQLAlchemy parameterizes — but `%`/`_` would otherwise act as
+    wildcards and could be used to enumerate or DoS the search."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 @router.get("", response_model=list[UserResponse])
 def get_users_batch(
@@ -39,7 +48,7 @@ def search_users(
     current_user: User = Depends(get_current_user),
 ):
     """Search users by name or email. Returns up to 10 matching users."""
-    pattern = f"%{q}%"
+    pattern = f"%{_escape_like(q)}%"
     users = db.query(User).filter(
         User.deleted_at.is_(None),
         (User.name.ilike(pattern) | User.email.ilike(pattern)),
@@ -52,7 +61,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
-@router.post("/invite", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/invite", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
 def invite_user(body: InviteRequest, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     if get_user_by_email(db, body.email):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -93,6 +102,7 @@ def update_user(user_id: uuid.UUID, body: UpdateProfileRequest, db: Session = De
     db.commit()
     db.refresh(user)
     return user
+
 
 
 @router.post("/{user_id}/avatar-upload", status_code=status.HTTP_201_CREATED)
@@ -142,7 +152,7 @@ def confirm_avatar_upload(
     return user
 
 
-@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/{user_id}/deactivate", response_model=AdminUserResponse)
 def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not user:
@@ -152,7 +162,7 @@ def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User =
     db.refresh(user)
     return user
 
-@router.patch("/{user_id}/reactivate", response_model=UserResponse)
+@router.patch("/{user_id}/reactivate", response_model=AdminUserResponse)
 def reactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not user:

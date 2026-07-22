@@ -84,12 +84,6 @@ async function fetchShareInfo(
   password?: string,
   logOpen?: boolean,
 ): Promise<ShareValidateResponse> {
-  const params = new URLSearchParams()
-  if (password) params.set('password', password)
-  if (logOpen) params.set('log_open', 'true')
-  const qs = params.toString() ? `?${params.toString()}` : ''
-  const url = `${API_URL}/share/${token}${qs}`
-
   // Include auth token if user is already logged in (for secure links)
   const headers: Record<string, string> = {}
   let accessToken: string | null = null
@@ -102,15 +96,36 @@ async function fetchShareInfo(
     headers['Authorization'] = `Bearer ${accessToken}`
   }
 
-  const response = await fetch(url, { headers })
-  if (!response.ok) {
-    if (response.status === 403) {
-      const data = await response.json().catch(() => ({}))
-      if (data.detail === 'Incorrect password') {
+  // When a password is supplied, use POST /share/{token}/verify so the
+  // password travels in the request body — not as a query string, which
+  // would be logged by nginx, browser history, Referer headers, and
+  // proxy/tunnel logs (SECURITY_AUDIT H3).
+  if (password) {
+    headers['Content-Type'] = 'application/json'
+    const body = JSON.stringify({ password, log_open: !!logOpen })
+    const resp = await fetch(`${API_URL}/share/${token}/verify`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+    if (!resp.ok) {
+      if (resp.status === 403) {
         return { requires_password: true, error: 'Incorrect password' }
       }
-      return { requires_password: true }
+      if (resp.status === 410) return { expired: true }
+      return {}
     }
+    return resp.json()
+  }
+
+  // No password — GET validates the link and either returns the full
+  // response (no password set / authenticated creator) or
+  // requires_password:true (password-protected, not yet verified).
+  const params = new URLSearchParams()
+  if (logOpen) params.set('log_open', 'true')
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  const response = await fetch(`${API_URL}/share/${token}${qs}`, { headers })
+  if (!response.ok) {
     if (response.status === 410) return { expired: true }
     return {}
   }

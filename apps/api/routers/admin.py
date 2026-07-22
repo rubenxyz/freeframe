@@ -7,7 +7,7 @@ import uuid
 from ..database import get_db
 from ..middleware.auth import get_current_user
 from ..models.user import User, UserStatus
-from ..schemas.auth import UserResponse, UpdateUserRoleRequest
+from ..schemas.auth import UserResponse, AdminUserResponse, UpdateUserRoleRequest
 from .users import require_admin
 from ..tasks.celery_app import send_task_safe
 from ..tasks.cleanup_tasks import cleanup_soft_deleted
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
-@router.get("/users", response_model=list[UserResponse])
+@router.get("/users", response_model=list[AdminUserResponse])
 def list_all_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -33,7 +33,7 @@ def list_all_users(
     users = db.query(User).filter(User.deleted_at.is_(None)).all()
     return users
 
-@router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/users/{user_id}/deactivate", response_model=AdminUserResponse)
 def deactivate_user(
     user_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -62,7 +62,7 @@ def deactivate_user(
     db.refresh(user)
     return user
 
-@router.patch("/users/{user_id}/reactivate", response_model=UserResponse)
+@router.patch("/users/{user_id}/reactivate", response_model=AdminUserResponse)
 def reactivate_user(
     user_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -84,7 +84,7 @@ def reactivate_user(
     db.refresh(user)
     return user
 
-@router.patch("/users/{user_id}/role", response_model=UserResponse)
+@router.patch("/users/{user_id}/role", response_model=AdminUserResponse)
 def update_user_role(
     user_id: uuid.UUID,
     body: UpdateUserRoleRequest,

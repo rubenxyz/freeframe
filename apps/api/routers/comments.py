@@ -35,7 +35,7 @@ from ..schemas.comment import (
 )
 from ..services import s3_service
 from ..services import comment_export
-from ..services.permissions import require_asset_access, validate_share_link
+from ..services.permissions import require_asset_access, validate_share_link_with_session
 from ..tasks.email_tasks import send_mention_email, send_comment_email
 from ..tasks.celery_app import send_task_safe
 
@@ -69,7 +69,16 @@ def _get_comment(db: Session, comment_id: uuid.UUID) -> Comment:
 
 
 def _build_attachment_response(attachment: CommentAttachment) -> AttachmentResponse:
-    url = s3_service.generate_presigned_get_url(attachment.s3_key, expires_in=3600)
+    # Pass download_filename so S3 returns Content-Disposition: attachment
+    # and the browser downloads instead of rendering. Without it an
+    # attacker who uploads an attachment with content_type=text/html gets
+    # a URL the browser renders as HTML — a stored-XSS surface on the S3
+    # origin.
+    url = s3_service.generate_presigned_get_url(
+        attachment.s3_key,
+        expires_in=3600,
+        download_filename=attachment.original_filename or "attachment",
+    )
     return AttachmentResponse(
         id=attachment.id,
         file_name=attachment.original_filename,
@@ -500,19 +509,24 @@ def create_attachment(
     asset = _get_asset(db, comment.asset_id)
     require_asset_access(db, asset, current_user)
 
-    # Generate S3 key
-    key = f"comment-attachments/{comment_id}/{uuid.uuid4()}/{body.file_name}"
+    # Sanitize the filename so it cannot break the S3 key or the presigned
+    # URL. S3 flattens path separators, so this isn't traversal — but
+    # control characters, '?', '#', and whitespace break keys and presigned
+    # signatures. Keep the original filename on the attachment record for
+    # the Content-Disposition download name.
+    import re as _re
+    safe_name = _re.sub(r"[^A-Za-z0-9._-]+", "_", body.file_name or "attachment").strip("._") or "attachment"
 
-    # Generate presigned PUT URL
-    s3 = s3_service.get_s3_client()
-    upload_url = s3.generate_presigned_url(
-        "put_object",
-        Params={
-            "Bucket": settings.s3_bucket,
-            "Key": key,
-            "ContentType": body.content_type,
-        },
-        ExpiresIn=3600,
+    # Generate S3 key
+    key = f"comment-attachments/{comment_id}/{uuid.uuid4()}/{safe_name}"
+
+    # Generate presigned PUT URL via the public-endpoint helper so browser
+    # uploads reach S3/MinIO. Calling get_s3_client() directly used the
+    # internal S3_ENDPOINT (http://localhost:9000 in MinIO deployments),
+    # unreachable from the browser and leaking the internal endpoint to
+    # every API caller.
+    upload_url = s3_service.generate_presigned_put_url(
+        key, content_type=body.content_type, expires_in=3600
     )
 
     # Save attachment record
@@ -790,14 +804,20 @@ def list_share_comments(
     asset_id: Optional[uuid.UUID] = None,
     version_id: Optional[uuid.UUID] = None,
     latest_only: bool = False,
+    share_session: Optional[str] = Query(None, alias="share_session"),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """Public endpoint — list comments for a shared asset. No auth required.
+    """Public endpoint — list comments for a shared asset. No auth required
+    (but a password session OR authenticated link creator is required for
+    password-protected links, matching /share/{token}/assets).
     For folder/project shares, pass asset_id as query param to get comments for a specific asset.
     Pass version_id to scope comments to a single version (matches the authenticated review view).
     Pass latest_only=true to scope to the latest ready version — used by the folder/grid preview,
     which has no version picker."""
-    link = validate_share_link(db, token)
+    link = validate_share_link_with_session(
+        db, token, share_session=share_session, current_user=current_user
+    )
 
     # Determine the asset_id to list comments for
     target_asset_id = link.asset_id or asset_id
@@ -833,10 +853,13 @@ def list_share_comments(
 def guest_comment(
     token: str,
     body: GuestCommentCreate,
+    share_session: Optional[str] = Query(None, alias="share_session"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    link = validate_share_link(db, token)
+    link = validate_share_link_with_session(
+        db, token, share_session=share_session, current_user=current_user
+    )
 
     # Check share link permission allows commenting
     if link.permission == SharePermission.view:

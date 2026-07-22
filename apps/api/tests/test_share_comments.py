@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 
 @patch("apps.api.routers.comments._build_comment_responses_batched")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_array_for_asset_share(
     mock_validate,
     mock_batched,
@@ -28,12 +28,11 @@ def test_share_comments_returns_array_for_asset_share(
 
     assert response.status_code == 200
     assert response.json() == [expected]
-    # Batched builder, called once for the whole thread (no per-comment N+1).
     mock_batched.assert_called_once_with(asset_id, [comment], mock_db)
 
 
 @patch("apps.api.routers.comments._build_comment_responses_batched")
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_array_for_folder_or_project_share_asset(
     mock_validate,
     mock_batched,
@@ -61,7 +60,7 @@ def test_share_comments_returns_array_for_folder_or_project_share_asset(
     mock_batched.assert_called_once_with(asset_id, [comment], mock_db)
 
 
-@patch("apps.api.routers.comments.validate_share_link")
+@patch("apps.api.routers.comments.validate_share_link_with_session")
 def test_share_comments_returns_empty_array_without_target_asset(
     mock_validate,
     client,

@@ -1,15 +1,22 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import uuid
 from ..models.user import UserStatus
+
+# Password constraints. bcrypt silently truncates at 72 bytes; surface
+# that as a 400 instead of letting longer passwords authenticate against
+# only their first 72 bytes. The 8-char floor closes the empty/1-char
+# password hole that let accounts be created with trivially-guessable
+# credentials.
+_PASSWORD_FIELD = Field(min_length=8, max_length=72)
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     name: str
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -28,7 +35,6 @@ class UserResponse(BaseModel):
     status: UserStatus
     email_verified: bool = False
     is_superadmin: bool = False
-    invite_token: str | None = None
     preferences: dict = {}
 
     model_config = {"from_attributes": True}
@@ -40,6 +46,14 @@ class UserResponse(BaseModel):
             from ..services import s3_service
             return s3_service.generate_presigned_get_url(v)
         return v
+
+
+class AdminUserResponse(UserResponse):
+    """Admin-scoped user view. Extends UserResponse with the invite token,
+    which is a credential — it must never be exposed to non-admin callers
+    (any-authenticated-user endpoints that returned UserResponse leaked
+    invite tokens, enabling account takeover via /auth/accept-invite)."""
+    invite_token: str | None = None
 
 class InviteRequest(BaseModel):
     email: EmailStr
@@ -58,12 +72,12 @@ class VerifyMagicCodeRequest(BaseModel):
     code: str
 
 class SetPasswordRequest(BaseModel):
-    password: str
+    password: str = _PASSWORD_FIELD
 
 # Invite flow
 class AcceptInviteRequest(BaseModel):
     token: str
-    password: str
+    password: str = _PASSWORD_FIELD
 
 class InviteInfoResponse(BaseModel):
     email: str
@@ -83,4 +97,15 @@ class UpdateUserRoleRequest(BaseModel):
 
 class DeactivateUserRequest(BaseModel):
     user_id: uuid.UUID
+
+
+class PreferencesUpdate(BaseModel):
+    """Schema-constrained preferences update.
+
+    Replaces the previous `body: dict` signature on PATCH /auth/me/preferences
+    so users can't store arbitrary giant/nested values (which would also be a
+    stored-XSS surface if any preference is rendered back without escaping).
+    Known keys only, primitive values only.
+    """
+    theme: str | None = None
 
