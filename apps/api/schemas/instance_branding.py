@@ -1,13 +1,14 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+import re
 from pydantic import BaseModel, field_validator
 
 HEX_COLOR_RE = r'^#[0-9A-Fa-f]{6}$'
 
 
 def _validate_hex_color(v: Optional[str]) -> Optional[str]:
-    if v is not None and not __import__('re').match(HEX_COLOR_RE, v):
+    if v is not None and not re.match(HEX_COLOR_RE, v):
         raise ValueError("Color must be a 6-digit hex value like '#7c3aed'")
     return v
 
