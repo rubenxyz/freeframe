@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -39,7 +40,8 @@ def _get_or_create_instance_branding(db: Session) -> InstanceBranding:
     row = db.query(InstanceBranding).first()
     if row:
         return row
-    row = InstanceBranding(id=_SINGLETON_ID)
+    now = datetime.now(timezone.utc)
+    row = InstanceBranding(id=_SINGLETON_ID, created_at=now, updated_at=now)
     db.add(row)
     try:
         db.commit()

@@ -184,10 +184,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
           {/* Uploads button */}
           <button
-            onClick={() => {
-              setNotifOpen(false)
-              togglePanel()
-            }}
+            onClick={() => { setNotifOpen(false); togglePanel() }}
             className={cn(
               'group relative flex w-full items-center rounded-md transition-colors duration-100',
               collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-2.5 px-2.5 h-9',
@@ -195,13 +192,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 ? 'bg-bg-hover text-text-primary'
                 : 'text-text-secondary hover:bg-bg-hover/60 hover:text-text-primary',
             )}
-          </div>
-          {!collapsed && (
-            <span className={cn('text-[13px]', panelOpen && 'font-medium')}>
-              Uploads
-            </span>
-          )}
-        </button>
+            title={collapsed ? 'Uploads' : undefined}
+          >
+            <div className="relative shrink-0">
+              <Upload className="h-[18px] w-[18px]" strokeWidth={panelOpen ? 2 : 1.5} />
+              {activeUploads > 0 && (
+                <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold text-white">
+                  {activeUploads}
+                </span>
+              )}
+            </div>
+            {!collapsed && (
+              <span className={cn('text-[13px]', panelOpen && 'font-medium')}>
+                Uploads
+              </span>
+            )}
+          </button>
       </nav>
 
       {/* Bottom section */}
